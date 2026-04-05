@@ -3,7 +3,7 @@
 
 # Environment (keep .env for docker deployment)
 .env.local
-
+.env 
 # IDE
 .idea/
 .vscode/
