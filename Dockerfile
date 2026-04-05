@@ -1,5 +1,5 @@
 # Build stage
-FROM rust:1.75-bookworm as builder
+FROM rust:1.82-bookworm as builder
 WORKDIR /app
 
 # Install dependencies for building
@@ -8,22 +8,10 @@ RUN apt-get update && apt-get install -y \
     libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy manifests first for dependency caching
-COPY Cargo.toml ./
-# Create Cargo.lock if it doesn't exist
-RUN cargo generate-lockfile
+# Copy all source code and build
+COPY . .
 
-# Create a dummy main.rs to build dependencies
-RUN mkdir src && echo "fn main() {}" > src/main.rs
-
-# Build dependencies only (this layer will be cached)
-RUN cargo build --release
-RUN rm src/main.rs
-
-# Copy actual source code
-COPY src ./src
-
-# Build the actual application
+# Build the application
 ENV SQLX_OFFLINE=true
 RUN cargo build --release
 

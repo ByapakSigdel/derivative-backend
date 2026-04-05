@@ -138,7 +138,7 @@ pub async fn record_view(
     .bind(user_id)
     .bind(request.view_duration)
     .bind(request.referrer.as_deref())
-    .bind(ip_address)
+    .bind(ip_address.map(|ip| ip.to_string()))
     .execute(pool)
     .await?;
     

@@ -6,9 +6,9 @@ use std::net::SocketAddr;
 use std::time::Duration;
 
 use axum::{
-    extract::{ConnectInfo, DefaultBodyLimit},
+    extract::DefaultBodyLimit,
     http::{header, HeaderValue, Method},
-    middleware,
+    middleware as axum_middleware,
     routing::get,
     Router,
 };
@@ -27,7 +27,7 @@ mod config;
 mod db;
 mod errors;
 mod handlers;
-mod middleware as app_middleware;
+mod middleware;
 mod models;
 mod routes;
 mod services;
@@ -110,18 +110,18 @@ async fn main() -> anyhow::Result<()> {
             "/api/user-projects",
             project_routes()
                 .merge(community_routes())
-                .layer(middleware::from_fn_with_state(
+                .layer(axum_middleware::from_fn_with_state(
                     pool.clone(),
-                    app_middleware::require_auth,
+                    middleware::require_auth,
                 )),
         )
         
         // User routes (protected)
         .nest(
             "/api/users",
-            user_routes().layer(middleware::from_fn_with_state(
+            user_routes().layer(axum_middleware::from_fn_with_state(
                 pool.clone(),
-                app_middleware::require_auth,
+                middleware::require_auth,
             )),
         )
         
@@ -129,10 +129,10 @@ async fn main() -> anyhow::Result<()> {
         .nest(
             "/api/admin",
             admin_routes()
-                .layer(middleware::from_fn(app_middleware::require_admin))
-                .layer(middleware::from_fn_with_state(
+                .layer(axum_middleware::from_fn(middleware::require_admin))
+                .layer(axum_middleware::from_fn_with_state(
                     pool.clone(),
-                    app_middleware::require_auth,
+                    middleware::require_auth,
                 )),
         )
         

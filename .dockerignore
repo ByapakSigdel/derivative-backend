@@ -1,0 +1,27 @@
+# Git
+.git
+.gitignore
+
+# Environment files (but we may need .env for build)
+.env.save
+
+# Build artifacts
+target/
+
+# IDE files
+.vscode/
+.idea/
+
+# Documentation
+README.md
+
+# Docker files
+Dockerfile
+docker-compose.yml
+
+# Uploads (development only)
+uploads/
+
+# OS generated files
+.DS_Store
+Thumbs.db
