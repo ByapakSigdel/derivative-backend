@@ -1,0 +1,31 @@
+# Generated files
+/target/
+Cargo.lock
+
+# Environment
+.env
+.env.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Uploads (keep directory structure)
+/uploads/avatars/*
+/uploads/project_assets/*
+!/uploads/avatars/.gitkeep
+!/uploads/project_assets/.gitkeep
+
+# Logs
+*.log
+logs/
+
+# SQLx offline mode
+.sqlx/
