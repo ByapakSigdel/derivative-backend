@@ -1,9 +1,7 @@
 # Generated files
 /target/
-Cargo.lock
 
-# Environment
-.env
+# Environment (keep .env for docker deployment)
 .env.local
 
 # IDE

@@ -1,0 +1,45 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: derivative-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: derivative
+      POSTGRES_PASSWORD: derivative_secure_password_2024
+      POSTGRES_DB: derivative
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U derivative -d derivative"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - derivative-network
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: derivative-backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env
+    ports:
+      - "8080:8080"
+    volumes:
+      - uploads_data:/app/uploads
+    networks:
+      - derivative-network
+
+volumes:
+  postgres_data:
+  uploads_data:
+
+networks:
+  derivative-network:
+    driver: bridge

@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use axum::{
     extract::{ConnectInfo, DefaultBodyLimit},
-    http::{header, Method},
+    http::{header, HeaderValue, Method},
     middleware,
     routing::get,
     Router,
@@ -15,7 +15,7 @@ use axum::{
 use tokio::signal;
 use tower::ServiceBuilder;
 use tower_http::{
-    cors::{Any, CorsLayer},
+    cors::{AllowOrigin, CorsLayer},
     services::ServeDir,
     timeout::TimeoutLayer,
     trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer},
@@ -69,9 +69,15 @@ async fn main() -> anyhow::Result<()> {
     // Ensure upload directories exist
     ensure_upload_dirs().await?;
     
-    // Build CORS layer
+    // Build CORS layer with multiple origins support
+    let allowed_origins: Vec<HeaderValue> = CONFIG
+        .cors_origin
+        .split(',')
+        .filter_map(|origin| origin.trim().parse().ok())
+        .collect();
+    
     let cors = CorsLayer::new()
-        .allow_origin(CONFIG.cors_origin.parse::<header::HeaderValue>().unwrap())
+        .allow_origin(AllowOrigin::list(allowed_origins))
         .allow_methods([
             Method::GET,
             Method::POST,
@@ -84,6 +90,9 @@ async fn main() -> anyhow::Result<()> {
             header::AUTHORIZATION,
             header::CONTENT_TYPE,
             header::ACCEPT,
+            header::ORIGIN,
+            header::ACCESS_CONTROL_REQUEST_METHOD,
+            header::ACCESS_CONTROL_REQUEST_HEADERS,
         ])
         .allow_credentials(true)
         .max_age(Duration::from_secs(3600));
