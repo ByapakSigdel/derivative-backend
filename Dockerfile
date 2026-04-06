@@ -1,5 +1,5 @@
 # Build stage
-FROM rust:1.82-bookworm as builder
+FROM rust:1.86-bookworm as builder
 WORKDIR /app
 
 # Install dependencies for building
