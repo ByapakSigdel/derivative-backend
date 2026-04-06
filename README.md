@@ -66,7 +66,7 @@ Production-ready Rust backend for the Derivative visual programming platform.
    cargo run --release
    ```
 
-The server will start at `http://localhost:8080`
+The server will start at `http://localhost:8081`
 
 ## API Documentation
 
@@ -314,7 +314,7 @@ Response:
 
 Connect to project collaboration room:
 ```
-ws://localhost:8080/ws/projects/:project_id?token=<access_token>
+ws://localhost:8081/ws/projects/:project_id?token=<access_token>
 ```
 
 #### Client Messages
