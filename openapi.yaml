@@ -1,0 +1,2154 @@
+openapi: 3.1.0
+info:
+  title: Derivative Backend API
+  description: |
+    Production-ready backend API for the Derivative visual programming platform.
+    
+    ## Authentication
+    This API uses JWT Bearer token authentication. To access protected endpoints:
+    1. Call `/api/auth/login` with your credentials to obtain tokens
+    2. Include the `access_token` in the `Authorization` header as `Bearer <token>`
+    3. When the access token expires, use `/api/auth/refresh` with your `refresh_token`
+    
+    ## Rate Limiting
+    API requests are rate-limited. If you exceed the limit, you'll receive a 429 status code.
+    
+    ## File Uploads
+    - Maximum upload size: Configured via environment variable
+    - Supported avatar formats: JPEG, PNG, GIF, WebP
+    - Files are served from `/api/uploads/`
+  version: 1.0.0
+  contact:
+    name: Derivative Team
+    url: https://github.com/derivative/backend
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://143.198.196.226:8081
+    description: Production server
+  - url: http://localhost:8081
+    description: Local development server
+
+tags:
+  - name: Health
+    description: Health check and server status
+  - name: Authentication
+    description: User authentication and token management
+  - name: Projects
+    description: User project management
+  - name: Community
+    description: Social features - likes, comments, views
+  - name: Users
+    description: User profile management
+  - name: Admin
+    description: Administrative operations (requires admin role)
+  - name: WebSocket
+    description: Real-time collaboration via WebSocket
+
+paths:
+  # ==================== HEALTH ====================
+  /health:
+    get:
+      tags:
+        - Health
+      summary: Health check
+      description: Returns the health status of the API and database connection
+      operationId: healthCheck
+      responses:
+        '200':
+          description: Server is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              example:
+                status: healthy
+                version: "1.0.0"
+                database:
+                  connected: true
+                  pool_size: 10
+                  pool_idle: 8
+                  pool_active: 2
+
+  # ==================== AUTHENTICATION ====================
+  /api/auth/login:
+    post:
+      tags:
+        - Authentication
+      summary: User login
+      description: Authenticate with email and password to obtain access and refresh tokens
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            example:
+              email: "user@example.com"
+              password: "securePassword123"
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/auth/logout:
+    post:
+      tags:
+        - Authentication
+      summary: User logout
+      description: Invalidate the current user's refresh token
+      operationId: logout
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Logout successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LogoutResponse'
+              example:
+                message: "Logged out successfully"
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/auth/refresh:
+    post:
+      tags:
+        - Authentication
+      summary: Refresh access token
+      description: Exchange a valid refresh token for a new access token and refresh token pair
+      operationId: refreshToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshTokenRequest'
+            example:
+              refresh_token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+      responses:
+        '200':
+          description: Tokens refreshed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          description: Invalid or expired refresh token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/auth/me:
+    get:
+      tags:
+        - Authentication
+      summary: Get current user
+      description: Get the profile of the currently authenticated user
+      operationId: getCurrentUser
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Current user profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ==================== PROJECTS ====================
+  /api/user-projects:
+    get:
+      tags:
+        - Projects
+      summary: List user's projects
+      description: Get a paginated list of the authenticated user's projects
+      operationId: listProjects
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - name: search
+          in: query
+          description: Search term for filtering projects by title or description
+          schema:
+            type: string
+        - name: category
+          in: query
+          description: Filter by project category
+          schema:
+            $ref: '#/components/schemas/ProjectCategory'
+        - name: difficulty
+          in: query
+          description: Filter by difficulty level
+          schema:
+            $ref: '#/components/schemas/ProjectDifficulty'
+        - name: featured
+          in: query
+          description: Filter by featured status
+          schema:
+            type: boolean
+        - name: sort_by
+          in: query
+          description: Field to sort by
+          schema:
+            $ref: '#/components/schemas/ProjectSortBy'
+        - name: sort_order
+          in: query
+          description: Sort direction
+          schema:
+            $ref: '#/components/schemas/SortOrder'
+      responses:
+        '200':
+          description: Paginated list of projects
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedProjectResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    post:
+      tags:
+        - Projects
+      summary: Create a project
+      description: Create a new project for the authenticated user
+      operationId: createProject
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProjectRequest'
+            example:
+              title: "My Visual Program"
+              description: "A simple visual programming tutorial"
+              difficulty: "beginner"
+              category: "tutorial"
+              nodes: []
+              edges: []
+              tags: ["beginner", "tutorial"]
+              is_public: false
+      responses:
+        '200':
+          description: Project created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/user-projects/stats:
+    get:
+      tags:
+        - Projects
+      summary: Get user's project statistics
+      description: Get aggregate statistics for all projects owned by the authenticated user
+      operationId: getProjectStats
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Project statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectStats'
+              example:
+                total_projects: 15
+                public_projects: 8
+                private_projects: 7
+                total_views: 1250
+                total_likes: 89
+                total_clones: 12
+                total_comments: 45
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/user-projects/public:
+    get:
+      tags:
+        - Projects
+      summary: List public projects
+      description: Get a paginated list of all public projects (community feed)
+      operationId: listPublicProjects
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - name: search
+          in: query
+          description: Search term for filtering projects
+          schema:
+            type: string
+        - name: category
+          in: query
+          description: Filter by project category
+          schema:
+            $ref: '#/components/schemas/ProjectCategory'
+        - name: difficulty
+          in: query
+          description: Filter by difficulty level
+          schema:
+            $ref: '#/components/schemas/ProjectDifficulty'
+        - name: featured
+          in: query
+          description: Filter by featured status
+          schema:
+            type: boolean
+        - name: sort_by
+          in: query
+          description: Field to sort by
+          schema:
+            $ref: '#/components/schemas/ProjectSortBy'
+        - name: sort_order
+          in: query
+          description: Sort direction
+          schema:
+            $ref: '#/components/schemas/SortOrder'
+      responses:
+        '200':
+          description: Paginated list of public projects with author info
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedProjectWithAuthorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/user-projects/{id}:
+    get:
+      tags:
+        - Projects
+      summary: Get a project
+      description: |
+        Get a single project by ID. 
+        - Public projects are accessible to everyone
+        - Private projects are only accessible to the owner
+      operationId: getProject
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdParam'
+      responses:
+        '200':
+          description: Project details with author info
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectWithAuthorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    patch:
+      tags:
+        - Projects
+      summary: Update a project
+      description: Update an existing project. Only the owner or an admin can update a project.
+      operationId: updateProject
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProjectRequest'
+            example:
+              title: "Updated Title"
+              description: "Updated description"
+              is_public: true
+      responses:
+        '200':
+          description: Project updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden - not the owner
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      tags:
+        - Projects
+      summary: Delete a project
+      description: Delete a project. Only the owner or an admin can delete a project.
+      operationId: deleteProject
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdParam'
+      responses:
+        '200':
+          description: Project deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteResponse'
+              example:
+                message: "Project deleted successfully"
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden - not the owner
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/user-projects/{id}/clone:
+    post:
+      tags:
+        - Projects
+      summary: Clone a project
+      description: Create a copy of a public project or one of your own projects
+      operationId: cloneProject
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CloneProjectRequest'
+            example:
+              title: "My Clone of Cool Project"
+      responses:
+        '200':
+          description: Project cloned successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ==================== COMMUNITY - LIKES ====================
+  /api/user-projects/{id}/like:
+    post:
+      tags:
+        - Community
+      summary: Toggle like on a project
+      description: Like or unlike a project. If already liked, this will unlike it.
+      operationId: toggleLike
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdParam'
+      responses:
+        '200':
+          description: Like toggled successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ToggleLikeResponse'
+              example:
+                liked: true
+                like_count: 42
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    get:
+      tags:
+        - Community
+      summary: Get like status
+      description: Check if the current user has liked a project
+      operationId: getLikeStatus
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdParam'
+      responses:
+        '200':
+          description: Like status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LikeStatusResponse'
+              example:
+                liked: true
+                like_count: 42
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      tags:
+        - Community
+      summary: Unlike a project
+      description: Remove your like from a project
+      operationId: unlikeProject
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdParam'
+      responses:
+        '200':
+          description: Project unliked successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LikeStatusResponse'
+              example:
+                liked: false
+                like_count: 41
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ==================== COMMUNITY - VIEWS ====================
+  /api/user-projects/{id}/view:
+    post:
+      tags:
+        - Community
+      summary: Record a project view
+      description: Record that a user viewed a project. Used for analytics and view counts.
+      operationId: recordView
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecordViewRequest'
+            example:
+              view_duration: 120
+              referrer: "https://example.com/projects"
+      responses:
+        '200':
+          description: View recorded successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ViewResponse'
+              example:
+                view_count: 156
+                recorded: true
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ==================== COMMUNITY - COMMENTS ====================
+  /api/user-projects/{id}/comments:
+    get:
+      tags:
+        - Community
+      summary: Get project comments
+      description: Get a paginated list of comments for a project, organized in threads
+      operationId: getComments
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdParam'
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - name: parent_id
+          in: query
+          description: Filter by parent comment ID (for nested replies)
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Threaded comments
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ThreadedCommentsResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    post:
+      tags:
+        - Community
+      summary: Create a comment
+      description: Add a comment to a project. Supports nested replies via parent_id.
+      operationId: createComment
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCommentRequest'
+            example:
+              content: "Great project! I learned a lot from this."
+              parent_id: null
+      responses:
+        '200':
+          description: Comment created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommentResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/user-projects/{id}/comments/{comment_id}:
+    get:
+      tags:
+        - Community
+      summary: Get a single comment
+      description: Get details of a specific comment
+      operationId: getComment
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdParam'
+        - $ref: '#/components/parameters/CommentIdParam'
+      responses:
+        '200':
+          description: Comment details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommentResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Comment not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    patch:
+      tags:
+        - Community
+      summary: Update a comment
+      description: Update the content of a comment. Only the comment author can update it.
+      operationId: updateComment
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdParam'
+        - $ref: '#/components/parameters/CommentIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCommentRequest'
+            example:
+              content: "Updated comment content"
+      responses:
+        '200':
+          description: Comment updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommentResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden - not the author
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Comment not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      tags:
+        - Community
+      summary: Delete a comment
+      description: Soft delete a comment. Only the comment author or an admin can delete it.
+      operationId: deleteComment
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdParam'
+        - $ref: '#/components/parameters/CommentIdParam'
+      responses:
+        '200':
+          description: Comment deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteResponse'
+              example:
+                message: "Comment deleted successfully"
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden - not the author
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Comment not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ==================== USERS ====================
+  /api/users/avatar:
+    post:
+      tags:
+        - Users
+      summary: Upload avatar
+      description: Upload a new avatar image for the authenticated user
+      operationId: uploadAvatar
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                avatar:
+                  type: string
+                  format: binary
+                  description: Avatar image file (JPEG, PNG, GIF, WebP)
+              required:
+                - avatar
+      responses:
+        '200':
+          description: Avatar uploaded successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AvatarResponse'
+              example:
+                url: "/api/uploads/avatars/550e8400-e29b-41d4-a716-446655440000/avatar.jpg"
+                filename: "avatar.jpg"
+        '400':
+          description: Invalid file or no file provided
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          description: File too large
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ==================== ADMIN ====================
+  /api/admin/users:
+    get:
+      tags:
+        - Admin
+      summary: List all users
+      description: Get a paginated list of all users in the system (admin only)
+      operationId: listUsers
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - name: search
+          in: query
+          description: Search by name or email
+          schema:
+            type: string
+        - name: user_type
+          in: query
+          description: Filter by user type
+          schema:
+            $ref: '#/components/schemas/UserType'
+        - name: organization_id
+          in: query
+          description: Filter by organization
+          schema:
+            type: string
+            format: uuid
+        - name: is_active
+          in: query
+          description: Filter by active status
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Paginated list of users
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedUserWithOrgResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden - admin access required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    post:
+      tags:
+        - Admin
+      summary: Create a user
+      description: Create a new user account (admin only)
+      operationId: createUser
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserRequest'
+            example:
+              email: "newuser@example.com"
+              full_name: "New User"
+              password: "securePassword123"
+              user_type: "user"
+              organization_id: null
+      responses:
+        '200':
+          description: User created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden - admin access required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: User with this email already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/admin/users/{id}:
+    patch:
+      tags:
+        - Admin
+      summary: Update a user
+      description: Update an existing user's details (admin only)
+      operationId: updateUser
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UserIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserRequest'
+            example:
+              full_name: "Updated Name"
+              is_active: true
+      responses:
+        '200':
+          description: User updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden - admin access required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      tags:
+        - Admin
+      summary: Delete a user
+      description: Delete a user account (admin only)
+      operationId: deleteUser
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UserIdParam'
+      responses:
+        '200':
+          description: User deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteResponse'
+              example:
+                message: "User deleted successfully"
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden - admin access required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ==================== STATIC FILES ====================
+  /api/uploads/{path}:
+    get:
+      tags:
+        - Users
+      summary: Get uploaded file
+      description: Retrieve a file from the uploads directory (avatars, etc.)
+      operationId: getUploadedFile
+      parameters:
+        - name: path
+          in: path
+          required: true
+          description: Path to the file within the uploads directory
+          schema:
+            type: string
+          example: "avatars/550e8400-e29b-41d4-a716-446655440000/avatar.jpg"
+      responses:
+        '200':
+          description: File content
+          content:
+            image/*:
+              schema:
+                type: string
+                format: binary
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: File not found
+
+  # ==================== WEBSOCKET ====================
+  /ws/projects/{id}:
+    get:
+      tags:
+        - WebSocket
+      summary: WebSocket connection for project collaboration
+      description: |
+        Establish a WebSocket connection for real-time collaboration on a project.
+        
+        **Authentication:** Pass the JWT access token as a query parameter `token`.
+        
+        **Client Messages:**
+        - `cursor_move`: Update cursor position
+        - `node_select`: Select/deselect nodes
+        - `node_update`: Update node data
+        - `chat`: Send chat message
+        
+        **Server Messages:**
+        - `user_joined`: User joined the room
+        - `user_left`: User left the room
+        - `users_list`: Current users in room
+        - `cursor_update`: Other user's cursor moved
+        - `selection_update`: Other user's selection changed
+        - `node_updated`: Node was updated
+        - `chat_message`: Chat message received
+        - `error`: Error message
+      operationId: projectWebSocket
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdParam'
+        - name: token
+          in: query
+          required: true
+          description: JWT access token for authentication
+          schema:
+            type: string
+      responses:
+        '101':
+          description: WebSocket connection established
+        '401':
+          description: Authentication failed
+        '404':
+          description: Project not found
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT access token obtained from /api/auth/login
+
+  parameters:
+    PageParam:
+      name: page
+      in: query
+      description: Page number (1-indexed)
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+
+    PerPageParam:
+      name: per_page
+      in: query
+      description: Number of items per page (max 100)
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+
+    ProjectIdParam:
+      name: id
+      in: path
+      required: true
+      description: Project UUID
+      schema:
+        type: string
+        format: uuid
+
+    CommentIdParam:
+      name: comment_id
+      in: path
+      required: true
+      description: Comment UUID
+      schema:
+        type: string
+        format: uuid
+
+    UserIdParam:
+      name: id
+      in: path
+      required: true
+      description: User UUID
+      schema:
+        type: string
+        format: uuid
+
+  schemas:
+    # ==================== ENUMS ====================
+    UserType:
+      type: string
+      enum:
+        - admin
+        - user
+      description: User role type
+
+    ProjectDifficulty:
+      type: string
+      enum:
+        - beginner
+        - intermediate
+        - advanced
+        - expert
+      description: Project difficulty level
+
+    ProjectCategory:
+      type: string
+      enum:
+        - tutorial
+        - game
+        - simulation
+        - art
+        - music
+        - utility
+        - education
+        - other
+      description: Project category
+
+    ProjectSortBy:
+      type: string
+      enum:
+        - created_at
+        - updated_at
+        - title
+        - view_count
+        - like_count
+        - clone_count
+        - comment_count
+      default: created_at
+      description: Field to sort projects by
+
+    SortOrder:
+      type: string
+      enum:
+        - asc
+        - desc
+      default: desc
+      description: Sort direction
+
+    ErrorCode:
+      type: string
+      enum:
+        - DATABASE_ERROR
+        - VALIDATION_ERROR
+        - UNAUTHORIZED
+        - INVALID_CREDENTIALS
+        - TOKEN_EXPIRED
+        - INVALID_TOKEN
+        - FORBIDDEN
+        - NOT_FOUND
+        - CONFLICT
+        - BAD_REQUEST
+        - FILE_UPLOAD_ERROR
+        - INVALID_FILE_TYPE
+        - FILE_TOO_LARGE
+        - RATE_LIMIT_EXCEEDED
+        - INTERNAL_SERVER_ERROR
+      description: Error code for identifying error types
+
+    # ==================== HEALTH ====================
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum:
+            - healthy
+            - unhealthy
+        version:
+          type: string
+        database:
+          $ref: '#/components/schemas/DatabaseHealth'
+      required:
+        - status
+        - version
+        - database
+
+    DatabaseHealth:
+      type: object
+      properties:
+        connected:
+          type: boolean
+        pool_size:
+          type: integer
+        pool_idle:
+          type: integer
+        pool_active:
+          type: integer
+      required:
+        - connected
+        - pool_size
+        - pool_idle
+        - pool_active
+
+    # ==================== AUTH ====================
+    LoginRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          description: User's email address
+        password:
+          type: string
+          minLength: 1
+          description: User's password
+      required:
+        - email
+        - password
+
+    RefreshTokenRequest:
+      type: object
+      properties:
+        refresh_token:
+          type: string
+          description: Refresh token obtained from login
+      required:
+        - refresh_token
+
+    AuthResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+          description: JWT access token
+        refresh_token:
+          type: string
+          description: JWT refresh token
+        token_type:
+          type: string
+          enum:
+            - Bearer
+        expires_in:
+          type: integer
+          format: int64
+          description: Access token expiry time in seconds
+        user:
+          $ref: '#/components/schemas/UserResponse'
+      required:
+        - access_token
+        - refresh_token
+        - token_type
+        - expires_in
+        - user
+
+    LogoutResponse:
+      type: object
+      properties:
+        message:
+          type: string
+      required:
+        - message
+
+    # ==================== USER ====================
+    UserResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        full_name:
+          type: string
+        user_type:
+          $ref: '#/components/schemas/UserType'
+        organization_id:
+          type: string
+          format: uuid
+          nullable: true
+        avatar_url:
+          type: string
+          nullable: true
+        is_active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - email
+        - full_name
+        - user_type
+        - is_active
+        - created_at
+        - updated_at
+
+    UserWithOrgResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        full_name:
+          type: string
+        user_type:
+          $ref: '#/components/schemas/UserType'
+        organization_id:
+          type: string
+          format: uuid
+          nullable: true
+        organization_name:
+          type: string
+          nullable: true
+        avatar_url:
+          type: string
+          nullable: true
+        is_active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - email
+        - full_name
+        - user_type
+        - is_active
+        - created_at
+        - updated_at
+
+    CreateUserRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          description: Valid email address
+        full_name:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: User's full name
+        password:
+          type: string
+          minLength: 8
+          maxLength: 128
+          description: Password (8-128 characters)
+        user_type:
+          $ref: '#/components/schemas/UserType'
+        organization_id:
+          type: string
+          format: uuid
+          nullable: true
+      required:
+        - email
+        - full_name
+        - password
+
+    UpdateUserRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        full_name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        password:
+          type: string
+          minLength: 8
+          maxLength: 128
+        user_type:
+          $ref: '#/components/schemas/UserType'
+        organization_id:
+          type: string
+          format: uuid
+          nullable: true
+        avatar_url:
+          type: string
+          nullable: true
+        is_active:
+          type: boolean
+
+    AvatarResponse:
+      type: object
+      properties:
+        url:
+          type: string
+          description: URL path to access the uploaded avatar
+        filename:
+          type: string
+          description: Stored filename
+      required:
+        - url
+        - filename
+
+    # ==================== PROJECT ====================
+    ProjectResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        description:
+          type: string
+          nullable: true
+        difficulty:
+          $ref: '#/components/schemas/ProjectDifficulty'
+        category:
+          $ref: '#/components/schemas/ProjectCategory'
+        nodes:
+          type: array
+          items: {}
+          description: Visual programming nodes (JSON)
+        edges:
+          type: array
+          items: {}
+          description: Connections between nodes (JSON)
+        materials:
+          type: array
+          items:
+            type: string
+        learning_goals:
+          type: array
+          items:
+            type: string
+        tags:
+          type: array
+          items:
+            type: string
+        is_public:
+          type: boolean
+        featured:
+          type: boolean
+        view_count:
+          type: integer
+        clone_count:
+          type: integer
+        like_count:
+          type: integer
+        comment_count:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        published_at:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+        - id
+        - user_id
+        - title
+        - difficulty
+        - category
+        - nodes
+        - edges
+        - materials
+        - learning_goals
+        - tags
+        - is_public
+        - featured
+        - view_count
+        - clone_count
+        - like_count
+        - comment_count
+        - created_at
+        - updated_at
+
+    ProjectWithAuthorResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        description:
+          type: string
+          nullable: true
+        difficulty:
+          $ref: '#/components/schemas/ProjectDifficulty'
+        category:
+          $ref: '#/components/schemas/ProjectCategory'
+        nodes:
+          type: array
+          items: {}
+        edges:
+          type: array
+          items: {}
+        materials:
+          type: array
+          items:
+            type: string
+        learning_goals:
+          type: array
+          items:
+            type: string
+        tags:
+          type: array
+          items:
+            type: string
+        is_public:
+          type: boolean
+        featured:
+          type: boolean
+        view_count:
+          type: integer
+        clone_count:
+          type: integer
+        like_count:
+          type: integer
+        comment_count:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        published_at:
+          type: string
+          format: date-time
+          nullable: true
+        author:
+          $ref: '#/components/schemas/AuthorInfo'
+        user_liked:
+          type: boolean
+          nullable: true
+      required:
+        - id
+        - user_id
+        - title
+        - difficulty
+        - category
+        - nodes
+        - edges
+        - materials
+        - learning_goals
+        - tags
+        - is_public
+        - featured
+        - view_count
+        - clone_count
+        - like_count
+        - comment_count
+        - created_at
+        - updated_at
+        - author
+
+    AuthorInfo:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        avatar_url:
+          type: string
+          nullable: true
+        organization_id:
+          type: string
+          format: uuid
+          nullable: true
+        organization_name:
+          type: string
+          nullable: true
+      required:
+        - id
+        - name
+
+    CreateProjectRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: Project title
+        description:
+          type: string
+          maxLength: 5000
+          nullable: true
+          description: Project description
+        difficulty:
+          $ref: '#/components/schemas/ProjectDifficulty'
+        category:
+          $ref: '#/components/schemas/ProjectCategory'
+        nodes:
+          type: array
+          items: {}
+          description: Visual programming nodes
+        edges:
+          type: array
+          items: {}
+          description: Connections between nodes
+        materials:
+          type: array
+          items:
+            type: string
+        learning_goals:
+          type: array
+          items:
+            type: string
+        tags:
+          type: array
+          items:
+            type: string
+          maxItems: 20
+        is_public:
+          type: boolean
+          default: false
+      required:
+        - title
+
+    UpdateProjectRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 255
+        description:
+          type: string
+          maxLength: 5000
+          nullable: true
+        difficulty:
+          $ref: '#/components/schemas/ProjectDifficulty'
+        category:
+          $ref: '#/components/schemas/ProjectCategory'
+        nodes:
+          type: array
+          items: {}
+        edges:
+          type: array
+          items: {}
+        materials:
+          type: array
+          items:
+            type: string
+        learning_goals:
+          type: array
+          items:
+            type: string
+        tags:
+          type: array
+          items:
+            type: string
+          maxItems: 20
+        is_public:
+          type: boolean
+        featured:
+          type: boolean
+          description: Only admins can set this
+
+    CloneProjectRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: Optional custom title for the cloned project
+
+    ProjectStats:
+      type: object
+      properties:
+        total_projects:
+          type: integer
+          format: int64
+        public_projects:
+          type: integer
+          format: int64
+        private_projects:
+          type: integer
+          format: int64
+        total_views:
+          type: integer
+          format: int64
+        total_likes:
+          type: integer
+          format: int64
+        total_clones:
+          type: integer
+          format: int64
+        total_comments:
+          type: integer
+          format: int64
+      required:
+        - total_projects
+        - public_projects
+        - private_projects
+        - total_views
+        - total_likes
+        - total_clones
+        - total_comments
+
+    # ==================== COMMUNITY ====================
+    ToggleLikeResponse:
+      type: object
+      properties:
+        liked:
+          type: boolean
+          description: Current like status after toggle
+        like_count:
+          type: integer
+          description: Updated total like count
+      required:
+        - liked
+        - like_count
+
+    LikeStatusResponse:
+      type: object
+      properties:
+        liked:
+          type: boolean
+        like_count:
+          type: integer
+      required:
+        - liked
+        - like_count
+
+    RecordViewRequest:
+      type: object
+      properties:
+        view_duration:
+          type: integer
+          nullable: true
+          description: Time spent viewing in seconds
+        referrer:
+          type: string
+          nullable: true
+          description: Referrer URL
+
+    ViewResponse:
+      type: object
+      properties:
+        view_count:
+          type: integer
+          description: Updated total view count
+        recorded:
+          type: boolean
+          description: Whether the view was recorded (may be false for duplicate views)
+      required:
+        - view_count
+        - recorded
+
+    CommentResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        parent_id:
+          type: string
+          format: uuid
+          nullable: true
+        content:
+          type: string
+          description: Comment content (shows "[Comment deleted]" if deleted)
+        is_deleted:
+          type: boolean
+        is_edited:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        author:
+          $ref: '#/components/schemas/CommentAuthor'
+        replies:
+          type: array
+          items:
+            $ref: '#/components/schemas/CommentResponse'
+          description: Nested replies (only for top-level comments)
+      required:
+        - id
+        - project_id
+        - user_id
+        - content
+        - is_deleted
+        - is_edited
+        - created_at
+        - updated_at
+        - author
+
+    CommentAuthor:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        avatar_url:
+          type: string
+          nullable: true
+      required:
+        - id
+        - name
+
+    CreateCommentRequest:
+      type: object
+      properties:
+        content:
+          type: string
+          minLength: 1
+          maxLength: 10000
+          description: Comment content
+        parent_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Parent comment ID for replies
+      required:
+        - content
+
+    UpdateCommentRequest:
+      type: object
+      properties:
+        content:
+          type: string
+          minLength: 1
+          maxLength: 10000
+      required:
+        - content
+
+    ThreadedCommentsResponse:
+      type: object
+      properties:
+        comments:
+          type: array
+          items:
+            $ref: '#/components/schemas/CommentResponse'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+        per_page:
+          type: integer
+        total_pages:
+          type: integer
+      required:
+        - comments
+        - total
+        - page
+        - per_page
+        - total_pages
+
+    # ==================== PAGINATION ====================
+    PaginationMeta:
+      type: object
+      properties:
+        page:
+          type: integer
+        per_page:
+          type: integer
+        total:
+          type: integer
+          format: int64
+        total_pages:
+          type: integer
+        has_next:
+          type: boolean
+        has_prev:
+          type: boolean
+      required:
+        - page
+        - per_page
+        - total
+        - total_pages
+        - has_next
+        - has_prev
+
+    PaginatedProjectResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectResponse'
+        pagination:
+          $ref: '#/components/schemas/PaginationMeta'
+      required:
+        - data
+        - pagination
+
+    PaginatedProjectWithAuthorResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectWithAuthorResponse'
+        pagination:
+          $ref: '#/components/schemas/PaginationMeta'
+      required:
+        - data
+        - pagination
+
+    PaginatedUserWithOrgResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserWithOrgResponse'
+        pagination:
+          $ref: '#/components/schemas/PaginationMeta'
+      required:
+        - data
+        - pagination
+
+    # ==================== COMMON ====================
+    DeleteResponse:
+      type: object
+      properties:
+        message:
+          type: string
+      required:
+        - message
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          $ref: '#/components/schemas/ErrorBody'
+      required:
+        - error
+
+    ErrorBody:
+      type: object
+      properties:
+        code:
+          $ref: '#/components/schemas/ErrorCode'
+        message:
+          type: string
+        details:
+          type: array
+          items:
+            type: string
+          nullable: true
+      required:
+        - code
+        - message
