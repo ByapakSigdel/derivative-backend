@@ -5,4 +5,5 @@ pub mod users;
 pub mod projects;
 pub mod community;
 pub mod admin;
+pub mod organizations;
 pub mod ws;
