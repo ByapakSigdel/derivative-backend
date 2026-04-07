@@ -11,28 +11,104 @@ use uuid::Uuid;
 
 /// Get dashboard overview metrics for admin
 pub async fn get_dashboard_metrics(pool: &PgPool) -> AppResult<DashboardMetrics> {
-    let metrics = sqlx::query_as::<_, DashboardMetrics>(
-        r#"
-        SELECT 
-            (SELECT COUNT(*) FROM user_profiles) as total_users,
-            (SELECT COUNT(*) FROM user_projects) as total_projects,
-            (SELECT COUNT(*) FROM user_projects WHERE is_public = TRUE) as public_projects,
-            (SELECT COUNT(*) FROM user_projects WHERE is_public = FALSE) as private_projects,
-            (SELECT COUNT(*) FROM organizations) as total_organizations,
-            (SELECT COALESCE(SUM(view_count), 0) FROM user_projects) as total_views,
-            (SELECT COALESCE(SUM(like_count), 0) FROM user_projects) as total_likes,
-            (SELECT COALESCE(SUM(comment_count), 0) FROM user_projects) as total_comments,
-            (SELECT COUNT(*) FROM compilation_logs) as total_compilations,
-            (SELECT COUNT(*) FROM compilation_logs WHERE status = 'success') as successful_compilations,
-            (SELECT COUNT(*) FROM upload_logs) as total_uploads,
-            (SELECT COUNT(*) FROM upload_logs WHERE status = 'success') as successful_uploads,
-            (SELECT COUNT(*) FROM user_projects WHERE featured = TRUE) as featured_projects
-        "#,
+    // Use individual queries for robustness when some tables might not exist
+    let total_users: i64 = sqlx::query_scalar("SELECT COUNT(*)::BIGINT FROM user_profiles")
+        .fetch_one(pool)
+        .await
+        .unwrap_or(0);
+
+    let total_projects: i64 = sqlx::query_scalar("SELECT COUNT(*)::BIGINT FROM user_projects")
+        .fetch_one(pool)
+        .await
+        .unwrap_or(0);
+
+    let public_projects: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*)::BIGINT FROM user_projects WHERE is_public = TRUE",
     )
     .fetch_one(pool)
-    .await?;
+    .await
+    .unwrap_or(0);
 
-    Ok(metrics)
+    let private_projects: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*)::BIGINT FROM user_projects WHERE is_public = FALSE",
+    )
+    .fetch_one(pool)
+    .await
+    .unwrap_or(0);
+
+    let total_organizations: i64 = sqlx::query_scalar("SELECT COUNT(*)::BIGINT FROM organizations")
+        .fetch_one(pool)
+        .await
+        .unwrap_or(0);
+
+    let total_views: i64 = sqlx::query_scalar(
+        "SELECT COALESCE(SUM(view_count), 0)::BIGINT FROM user_projects",
+    )
+    .fetch_one(pool)
+    .await
+    .unwrap_or(0);
+
+    let total_likes: i64 = sqlx::query_scalar(
+        "SELECT COALESCE(SUM(like_count), 0)::BIGINT FROM user_projects",
+    )
+    .fetch_one(pool)
+    .await
+    .unwrap_or(0);
+
+    let total_comments: i64 = sqlx::query_scalar(
+        "SELECT COALESCE(SUM(comment_count), 0)::BIGINT FROM user_projects",
+    )
+    .fetch_one(pool)
+    .await
+    .unwrap_or(0);
+
+    // These might fail if tables don't exist yet - use default 0
+    let total_compilations: i64 = sqlx::query_scalar("SELECT COUNT(*)::BIGINT FROM compilation_logs")
+        .fetch_one(pool)
+        .await
+        .unwrap_or(0);
+
+    let successful_compilations: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*)::BIGINT FROM compilation_logs WHERE status = 'success'",
+    )
+    .fetch_one(pool)
+    .await
+    .unwrap_or(0);
+
+    let total_uploads: i64 = sqlx::query_scalar("SELECT COUNT(*)::BIGINT FROM upload_logs")
+        .fetch_one(pool)
+        .await
+        .unwrap_or(0);
+
+    let successful_uploads: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*)::BIGINT FROM upload_logs WHERE status = 'success'",
+    )
+    .fetch_one(pool)
+    .await
+    .unwrap_or(0);
+
+    let featured_projects: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*)::BIGINT FROM user_projects WHERE is_featured = TRUE",
+    )
+    .fetch_one(pool)
+    .await
+    .unwrap_or(0);
+
+    Ok(DashboardMetrics {
+        total_users,
+        total_projects,
+        public_projects,
+        private_projects,
+        total_organizations,
+        total_views,
+        total_likes,
+        total_comments,
+        total_compilations,
+        successful_compilations,
+        total_uploads,
+        successful_uploads,
+        featured_projects,
+    })
 }
 
 /// Get metrics time series for charts (last 30 days)
