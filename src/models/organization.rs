@@ -19,9 +19,13 @@ pub struct Organization {
 /// Request body for creating an organization
 #[derive(Debug, Deserialize, Validate)]
 pub struct CreateOrganizationRequest {
-    #[validate(length(min = 1, max = 255, message = "Name must be between 1 and 255 characters"))]
+    #[validate(length(
+        min = 1,
+        max = 255,
+        message = "Name must be between 1 and 255 characters"
+    ))]
     pub name: String,
-    
+
     #[validate(length(max = 2000, message = "Description must be at most 2000 characters"))]
     pub description: Option<String>,
 }
@@ -29,9 +33,13 @@ pub struct CreateOrganizationRequest {
 /// Request body for updating an organization
 #[derive(Debug, Deserialize, Validate)]
 pub struct UpdateOrganizationRequest {
-    #[validate(length(min = 1, max = 255, message = "Name must be between 1 and 255 characters"))]
+    #[validate(length(
+        min = 1,
+        max = 255,
+        message = "Name must be between 1 and 255 characters"
+    ))]
     pub name: Option<String>,
-    
+
     #[validate(length(max = 2000, message = "Description must be at most 2000 characters"))]
     pub description: Option<String>,
 }

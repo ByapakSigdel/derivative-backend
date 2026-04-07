@@ -103,56 +103,64 @@ pub struct ProjectWithAuthor {
 /// Request body for creating a project
 #[derive(Debug, Deserialize, Validate)]
 pub struct CreateProjectRequest {
-    #[validate(length(min = 1, max = 255, message = "Title must be between 1 and 255 characters"))]
+    #[validate(length(
+        min = 1,
+        max = 255,
+        message = "Title must be between 1 and 255 characters"
+    ))]
     pub title: String,
-    
+
     #[validate(length(max = 5000, message = "Description must be at most 5000 characters"))]
     pub description: Option<String>,
-    
+
     pub difficulty: Option<ProjectDifficulty>,
-    
+
     pub category: Option<ProjectCategory>,
-    
+
     pub nodes: Option<serde_json::Value>,
-    
+
     pub edges: Option<serde_json::Value>,
-    
+
     pub materials: Option<Vec<String>>,
-    
+
     pub learning_goals: Option<Vec<String>>,
-    
+
     #[validate(length(max = 20, message = "Maximum 20 tags allowed"))]
     pub tags: Option<Vec<String>>,
-    
+
     pub is_public: Option<bool>,
 }
 
 /// Request body for updating a project
 #[derive(Debug, Deserialize, Validate)]
 pub struct UpdateProjectRequest {
-    #[validate(length(min = 1, max = 255, message = "Title must be between 1 and 255 characters"))]
+    #[validate(length(
+        min = 1,
+        max = 255,
+        message = "Title must be between 1 and 255 characters"
+    ))]
     pub title: Option<String>,
-    
+
     #[validate(length(max = 5000, message = "Description must be at most 5000 characters"))]
     pub description: Option<String>,
-    
+
     pub difficulty: Option<ProjectDifficulty>,
-    
+
     pub category: Option<ProjectCategory>,
-    
+
     pub nodes: Option<serde_json::Value>,
-    
+
     pub edges: Option<serde_json::Value>,
-    
+
     pub materials: Option<Vec<String>>,
-    
+
     pub learning_goals: Option<Vec<String>>,
-    
+
     #[validate(length(max = 20, message = "Maximum 20 tags allowed"))]
     pub tags: Option<Vec<String>>,
-    
+
     pub is_public: Option<bool>,
-    
+
     pub featured: Option<bool>,
 }
 
@@ -332,6 +340,10 @@ pub struct ProjectStats {
 /// Clone project request
 #[derive(Debug, Deserialize, Validate)]
 pub struct CloneProjectRequest {
-    #[validate(length(min = 1, max = 255, message = "Title must be between 1 and 255 characters"))]
+    #[validate(length(
+        min = 1,
+        max = 255,
+        message = "Title must be between 1 and 255 characters"
+    ))]
     pub title: Option<String>,
 }

@@ -34,3 +34,40 @@ pub fn ensure_admin(auth_user: &AuthUser) -> Result<(), AppError> {
     }
     Ok(())
 }
+
+/// Admin user extractor for handlers (verifies admin status)
+#[derive(Debug, Clone)]
+pub struct AdminUser(pub AuthUser);
+
+impl AdminUser {
+    pub fn user(&self) -> &AuthUser {
+        &self.0
+    }
+}
+
+/// Axum extractor for admin user
+#[axum::async_trait]
+impl<S> axum::extract::FromRequestParts<S> for AdminUser
+where
+    S: Send + Sync,
+{
+    type Rejection = AppError;
+    
+    async fn from_request_parts(
+        parts: &mut axum::http::request::Parts,
+        _state: &S,
+    ) -> Result<Self, Self::Rejection> {
+        let auth_user = parts
+            .extensions
+            .get::<AuthUser>()
+            .cloned()
+            .ok_or(AppError::Unauthorized)?;
+        
+        // Verify admin status
+        if auth_user.user_type != UserType::Admin {
+            return Err(AppError::Forbidden);
+        }
+        
+        Ok(AdminUser(auth_user))
+    }
+}

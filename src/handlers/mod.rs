@@ -7,3 +7,5 @@ pub mod community;
 pub mod admin;
 pub mod organizations;
 pub mod ws;
+pub mod collaboration;
+pub mod metrics;

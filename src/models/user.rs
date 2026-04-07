@@ -61,15 +61,23 @@ pub struct UserWithOrganization {
 pub struct CreateUserRequest {
     #[validate(email(message = "Invalid email format"))]
     pub email: String,
-    
-    #[validate(length(min = 1, max = 255, message = "Full name must be between 1 and 255 characters"))]
+
+    #[validate(length(
+        min = 1,
+        max = 255,
+        message = "Full name must be between 1 and 255 characters"
+    ))]
     pub full_name: String,
-    
-    #[validate(length(min = 8, max = 128, message = "Password must be between 8 and 128 characters"))]
+
+    #[validate(length(
+        min = 8,
+        max = 128,
+        message = "Password must be between 8 and 128 characters"
+    ))]
     pub password: String,
-    
+
     pub user_type: Option<UserType>,
-    
+
     pub organization_id: Option<Uuid>,
 }
 
@@ -78,19 +86,27 @@ pub struct CreateUserRequest {
 pub struct UpdateUserRequest {
     #[validate(email(message = "Invalid email format"))]
     pub email: Option<String>,
-    
-    #[validate(length(min = 1, max = 255, message = "Full name must be between 1 and 255 characters"))]
+
+    #[validate(length(
+        min = 1,
+        max = 255,
+        message = "Full name must be between 1 and 255 characters"
+    ))]
     pub full_name: Option<String>,
-    
-    #[validate(length(min = 8, max = 128, message = "Password must be between 8 and 128 characters"))]
+
+    #[validate(length(
+        min = 8,
+        max = 128,
+        message = "Password must be between 8 and 128 characters"
+    ))]
     pub password: Option<String>,
-    
+
     pub user_type: Option<UserType>,
-    
+
     pub organization_id: Option<Uuid>,
-    
+
     pub avatar_url: Option<String>,
-    
+
     pub is_active: Option<bool>,
 }
 
@@ -99,7 +115,7 @@ pub struct UpdateUserRequest {
 pub struct LoginRequest {
     #[validate(email(message = "Invalid email format"))]
     pub email: String,
-    
+
     #[validate(length(min = 1, message = "Password is required"))]
     pub password: String,
 }

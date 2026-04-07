@@ -5,9 +5,13 @@ pub mod user_service;
 pub mod project_service;
 pub mod community_service;
 pub mod organization_service;
+pub mod collaboration_service;
+pub mod metrics_service;
 
 pub use auth_service::*;
 pub use user_service::*;
 pub use project_service::*;
 pub use community_service::*;
 pub use organization_service::*;
+pub use collaboration_service::*;
+pub use metrics_service::*;

@@ -37,7 +37,11 @@ mod websocket;
 use config::CONFIG;
 use db::{check_health, create_pool, get_pool_stats, DbPool};
 use errors::AppResult;
-use routes::{admin_routes, auth_routes, protected_auth_routes, community_routes, project_routes, user_routes, ws_routes};
+use routes::{
+    admin_routes, auth_routes, protected_auth_routes, community_routes, 
+    project_routes, user_routes, ws_routes, collaboration_routes,
+    admin_metrics_routes, metrics_routes
+};
 use utils::file_storage::ensure_upload_dirs;
 
 /// Application state
@@ -125,6 +129,24 @@ async fn main() -> anyhow::Result<()> {
                 )),
         )
         
+        // Collaboration routes (protected)
+        .nest(
+            "/api",
+            collaboration_routes().layer(axum_middleware::from_fn_with_state(
+                pool.clone(),
+                middleware::require_auth,
+            )),
+        )
+        
+        // Metrics routes (protected, for logging)
+        .nest(
+            "/api/metrics",
+            metrics_routes().layer(axum_middleware::from_fn_with_state(
+                pool.clone(),
+                middleware::require_auth,
+            )),
+        )
+        
         // User routes (protected)
         .nest(
             "/api/users",
@@ -138,6 +160,17 @@ async fn main() -> anyhow::Result<()> {
         .nest(
             "/api/admin",
             admin_routes()
+                .layer(axum_middleware::from_fn(middleware::require_admin))
+                .layer(axum_middleware::from_fn_with_state(
+                    pool.clone(),
+                    middleware::require_auth,
+                )),
+        )
+        
+        // Admin metrics routes (protected + admin only)
+        .nest(
+            "/api/admin/metrics",
+            admin_metrics_routes()
                 .layer(axum_middleware::from_fn(middleware::require_admin))
                 .layer(axum_middleware::from_fn_with_state(
                     pool.clone(),

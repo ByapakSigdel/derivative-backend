@@ -39,16 +39,24 @@ pub struct CommentWithAuthor {
 /// Request body for creating a comment
 #[derive(Debug, Deserialize, Validate)]
 pub struct CreateCommentRequest {
-    #[validate(length(min = 1, max = 10000, message = "Comment must be between 1 and 10000 characters"))]
+    #[validate(length(
+        min = 1,
+        max = 10000,
+        message = "Comment must be between 1 and 10000 characters"
+    ))]
     pub content: String,
-    
+
     pub parent_id: Option<Uuid>,
 }
 
 /// Request body for updating a comment
 #[derive(Debug, Deserialize, Validate)]
 pub struct UpdateCommentRequest {
-    #[validate(length(min = 1, max = 10000, message = "Comment must be between 1 and 10000 characters"))]
+    #[validate(length(
+        min = 1,
+        max = 10000,
+        message = "Comment must be between 1 and 10000 characters"
+    ))]
     pub content: String,
 }
 
@@ -84,7 +92,7 @@ impl From<CommentWithAuthor> for CommentResponse {
         } else {
             comment.content
         };
-        
+
         Self {
             id: comment.id,
             project_id: comment.project_id,
