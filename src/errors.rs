@@ -1,5 +1,5 @@
 //! Custom error types and error handling for the Derivative backend.
-//! 
+//!
 //! Provides consistent error responses across all API endpoints.
 
 use axum::{
@@ -16,46 +16,46 @@ use tracing::error;
 pub enum AppError {
     #[error("Database error: {0}")]
     Database(#[from] sqlx::Error),
-    
+
     #[error("Validation error: {0}")]
     Validation(String),
-    
+
     #[error("Authentication required")]
     Unauthorized,
-    
+
     #[error("Invalid credentials")]
     InvalidCredentials,
-    
+
     #[error("Token expired")]
     TokenExpired,
-    
+
     #[error("Invalid token")]
     InvalidToken,
-    
+
     #[error("Access forbidden")]
     Forbidden,
-    
+
     #[error("Resource not found: {0}")]
     NotFound(String),
-    
+
     #[error("Conflict: {0}")]
     Conflict(String),
-    
+
     #[error("Bad request: {0}")]
     BadRequest(String),
-    
+
     #[error("File upload error: {0}")]
     FileUpload(String),
-    
+
     #[error("Invalid file type: {0}")]
     InvalidFileType(String),
-    
+
     #[error("File too large")]
     FileTooLarge,
-    
+
     #[error("Rate limit exceeded")]
     RateLimitExceeded,
-    
+
     #[error("Internal server error")]
     Internal(#[from] anyhow::Error),
 }
@@ -149,12 +149,9 @@ impl IntoResponse for AppError {
                 format!("{} not found", resource),
                 None,
             ),
-            AppError::Conflict(msg) => (
-                StatusCode::CONFLICT,
-                ErrorCode::Conflict,
-                msg.clone(),
-                None,
-            ),
+            AppError::Conflict(msg) => {
+                (StatusCode::CONFLICT, ErrorCode::Conflict, msg.clone(), None)
+            }
             AppError::BadRequest(msg) => (
                 StatusCode::BAD_REQUEST,
                 ErrorCode::BadRequest,
@@ -187,10 +184,19 @@ impl IntoResponse for AppError {
             ),
             AppError::Internal(e) => {
                 error!("Internal error: {:?}", e);
+                // In development mode, include more details
+                let message = if std::env::var("RUST_LOG")
+                    .map(|v| v.contains("debug"))
+                    .unwrap_or(false)
+                {
+                    format!("Internal error: {}", e)
+                } else {
+                    "An internal error occurred".to_string()
+                };
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     ErrorCode::InternalServerError,
-                    "An internal error occurred".to_string(),
+                    message,
                     None,
                 )
             }
@@ -227,12 +233,16 @@ impl From<validator::ValidationErrors> for AppError {
                     format!(
                         "{}: {}",
                         field,
-                        error.message.as_ref().map(|m| m.to_string()).unwrap_or_else(|| "invalid".to_string())
+                        error
+                            .message
+                            .as_ref()
+                            .map(|m| m.to_string())
+                            .unwrap_or_else(|| "invalid".to_string())
                     )
                 })
             })
             .collect();
-        
+
         AppError::Validation(messages.join(", "))
     }
 }

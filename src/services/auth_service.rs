@@ -2,6 +2,7 @@
 
 use chrono::{Duration, Utc};
 use sqlx::PgPool;
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 use crate::config::CONFIG;
@@ -12,6 +13,8 @@ use crate::utils::password::verify_password;
 
 /// Authenticate user with email and password
 pub async fn login(pool: &PgPool, request: &LoginRequest) -> AppResult<AuthResponse> {
+    info!("Login attempt for email: {}", request.email);
+    
     // Find user by email
     let user: UserProfile = sqlx::query_as(
         r#"
@@ -25,16 +28,32 @@ pub async fn login(pool: &PgPool, request: &LoginRequest) -> AppResult<AuthRespo
     .bind(&request.email)
     .fetch_optional(pool)
     .await?
-    .ok_or(AppError::InvalidCredentials)?;
+    .ok_or_else(|| {
+        warn!("Login failed: User not found for email: {}", request.email);
+        AppError::InvalidCredentials
+    })?;
+    
+    debug!("User found: id={}, email={}, is_active={}", user.id, user.email, user.is_active);
     
     // Check if account is active
     if !user.is_active {
+        warn!("Login failed: Account is inactive for user: {}", user.email);
         return Err(AppError::Forbidden);
     }
     
     // Verify password
-    if !verify_password(&request.password, &user.password_hash)? {
-        return Err(AppError::InvalidCredentials);
+    match verify_password(&request.password, &user.password_hash) {
+        Ok(true) => {
+            debug!("Password verification successful for user: {}", user.email);
+        }
+        Ok(false) => {
+            warn!("Login failed: Invalid password for user: {}", user.email);
+            return Err(AppError::InvalidCredentials);
+        }
+        Err(e) => {
+            error!("Password verification error for user {}: {:?}", user.email, e);
+            return Err(e);
+        }
     }
     
     // Generate tokens
@@ -57,6 +76,8 @@ pub async fn login(pool: &PgPool, request: &LoginRequest) -> AppResult<AuthRespo
     .bind(user.id)
     .execute(pool)
     .await?;
+    
+    info!("Login successful for user: {} (id: {})", user.email, user.id);
     
     Ok(AuthResponse {
         access_token,
