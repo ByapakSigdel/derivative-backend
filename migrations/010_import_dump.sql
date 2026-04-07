@@ -24,13 +24,13 @@ ON CONFLICT (id) DO NOTHING;
 -- ============================================
 
 -- Profile: poshan@poshan.com
--- Note: full_name and password_hash are NOT NULL in local schema, using placeholder values
+-- Password: poshan
 INSERT INTO public.user_profiles (id, email, full_name, password_hash, user_type, organization_id, avatar_url, is_active, created_at, updated_at)
 VALUES (
     'adfcb56a-38cf-4f0b-863f-5fe2c97987ab',
     'poshan@poshan.com',
     'poshan',
-    '$argon2id$v=19$m=65536,t=3,p=4$IMPORTED_USER_NEEDS_PASSWORD_RESET',
+    '$argon2id$v=19$m=65536,t=3,p=4$c2FsdDFwb3NoYW4$0MejJJJmDcJflMGshmQ1VK7uhai7dsl6iv3Lzqz30CQ',
     'user',
     NULL,
     NULL,
@@ -41,13 +41,13 @@ VALUES (
 ON CONFLICT (id) DO NOTHING;
 
 -- Profile: byapak@byapak.com (admin)
--- Note: full_name and password_hash are NOT NULL in local schema, using placeholder values
+-- Password: byapak
 INSERT INTO public.user_profiles (id, email, full_name, password_hash, user_type, organization_id, avatar_url, is_active, created_at, updated_at)
 VALUES (
     'f7dc94b1-13b2-4a85-92e8-92da6dbd03cc',
     'byapak@byapak.com',
     'byapak',
-    '$argon2id$v=19$m=65536,t=3,p=4$IMPORTED_USER_NEEDS_PASSWORD_RESET',
+    '$argon2id$v=19$m=65536,t=3,p=4$c2FsdDJieWFwYWs$uaR7DUK3P8L5E7dGi6YPAS09v4AoS202U7SJHhPf9MA',
     'admin',
     NULL,
     NULL,
@@ -58,13 +58,13 @@ VALUES (
 ON CONFLICT (id) DO NOTHING;
 
 -- Profile: testuser1@derivative.com
--- Note: password_hash is NOT NULL in local schema, using placeholder value
+-- Password: testuser123
 INSERT INTO public.user_profiles (id, email, full_name, password_hash, user_type, organization_id, avatar_url, is_active, created_at, updated_at)
 VALUES (
     '204b9247-4e97-4309-a71a-c2483bb8b46f',
     'testuser1@derivative.com',
     'testUser1',
-    '$argon2id$v=19$m=65536,t=3,p=4$IMPORTED_USER_NEEDS_PASSWORD_RESET',
+    '$argon2id$v=19$m=65536,t=3,p=4$c2FsdDR0ZXN0MQ$vb0n/AHwgbTG/BBCtcwk0d1PX7KcUzulMvTjcIu0Bjc',
     'user',
     '6eadc5b9-b111-4b27-b17f-34aa5aa79865',
     NULL,
@@ -75,13 +75,13 @@ VALUES (
 ON CONFLICT (id) DO NOTHING;
 
 -- Profile: testuser2@codeatderivative.com
--- Note: password_hash is NOT NULL in local schema, using placeholder value
+-- Password: testuser123
 INSERT INTO public.user_profiles (id, email, full_name, password_hash, user_type, organization_id, avatar_url, is_active, created_at, updated_at)
 VALUES (
     '854a964f-a844-48b4-bbe1-57a57046c68e',
     'testuser2@codeatderivative.com',
     'testuser2',
-    '$argon2id$v=19$m=65536,t=3,p=4$IMPORTED_USER_NEEDS_PASSWORD_RESET',
+    '$argon2id$v=19$m=65536,t=3,p=4$c2FsdDV0ZXN0Mg$EqyTDYxhJ++J8hXSaAQmE8r/FWUQ0ug9pmMEWkjrVRw',
     'user',
     '6eadc5b9-b111-4b27-b17f-34aa5aa79865',
     NULL,
@@ -92,13 +92,13 @@ VALUES (
 ON CONFLICT (id) DO NOTHING;
 
 -- Profile: sandip@sandip.com (admin)
--- Note: full_name and password_hash are NOT NULL in local schema, using placeholder values
+-- Password: sandip
 INSERT INTO public.user_profiles (id, email, full_name, password_hash, user_type, organization_id, avatar_url, is_active, created_at, updated_at)
 VALUES (
     '31684c1d-7acd-44b3-ad95-a8717ab2860d',
     'sandip@sandip.com',
     'sandip',
-    '$argon2id$v=19$m=65536,t=3,p=4$IMPORTED_USER_NEEDS_PASSWORD_RESET',
+    '$argon2id$v=19$m=65536,t=3,p=4$c2FsdDNzYW5kaXA$oNbwywPxAMCw90lXT9UZMw4fVlGhq+iPeMaWHyvRXBQ',
     'admin',
     NULL,
     NULL,

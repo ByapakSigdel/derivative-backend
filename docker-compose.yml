@@ -29,6 +29,9 @@ services:
         condition: service_healthy
     env_file:
       - .env
+    environment:
+      # Override CORS to include server IP for Swagger UI access
+      - CORS_ORIGIN=https://codeatderivative.com,https://www.codeatderivative.com,http://143.198.196.226:8081,http://localhost:8081
     ports:
       - "8081:8081"
     volumes:
