@@ -14,7 +14,7 @@ use tracing::{error, info, warn};
 use uuid::Uuid;
 
 use crate::db::DbPool;
-use crate::services::{auth_service, project_service};
+use crate::services::{auth_service, collaboration_service, project_service};
 use crate::utils::jwt::verify_access_token;
 use crate::websocket::{
     handler::{handle_client_message, room_manager, ConnectedUser},
@@ -71,19 +71,38 @@ async fn handle_socket(
     user_id: Uuid,
     _user_email: String,
 ) {
-    // Verify project exists and user has access
-    let project = match project_service::get_project_by_id(&pool, project_id).await {
-        Ok(p) => p,
-        Err(e) => {
-            error!("WebSocket: Project not found: {:?}", e);
-            return;
-        }
-    };
+    // Check if this is a temporary collaboration session (temp-xxx)
+    // Temporary sessions don't require project to exist in database
+    let project_id_str = project_id.to_string();
+    let is_temporary = project_id_str.starts_with("00000000-0000-0000-0000-");
     
-    // Check if user can access the project
-    if !project.is_public && project.user_id != user_id {
-        error!("WebSocket: User {} cannot access project {}", user_id, project_id);
-        return;
+    if !is_temporary {
+        // Verify project exists and user has access
+        let project = match project_service::get_project_by_id(&pool, project_id).await {
+            Ok(p) => p,
+            Err(e) => {
+                error!("WebSocket: Project not found: {:?}", e);
+                return;
+            }
+        };
+        
+        // Check if user can access the project (owner, collaborator, or public)
+        if !project.is_public {
+            // Check if user is owner or collaborator using the collaboration service
+            let can_access = match collaboration_service::can_user_access_project(&pool, project_id, user_id).await {
+                Ok(access) => access,
+                Err(e) => {
+                    // If the function fails (table doesn't exist), fall back to owner check
+                    warn!("WebSocket: can_user_access_project failed: {:?}, falling back to owner check", e);
+                    project.user_id == user_id
+                }
+            };
+            
+            if !can_access {
+                error!("WebSocket: User {} cannot access project {}", user_id, project_id);
+                return;
+            }
+        }
     }
     
     // Get user info
