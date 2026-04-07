@@ -8,11 +8,16 @@ use axum::{
 use crate::db::DbPool;
 use crate::handlers::auth as handlers;
 
-/// Create authentication routes
+/// Create public authentication routes (no auth required)
 pub fn auth_routes() -> Router<DbPool> {
     Router::new()
         .route("/login", post(handlers::login))
-        .route("/logout", post(handlers::logout))
         .route("/refresh", post(handlers::refresh))
+}
+
+/// Create protected authentication routes (auth required)
+pub fn protected_auth_routes() -> Router<DbPool> {
+    Router::new()
+        .route("/logout", post(handlers::logout))
         .route("/me", get(handlers::me))
 }

@@ -22,5 +22,8 @@ pub fn community_routes() -> Router<DbPool> {
         .route("/:id/comments", post(handlers::create_comment))
         .route("/:id/comments/:comment_id", get(handlers::get_comment))
         .route("/:id/comments/:comment_id", patch(handlers::update_comment))
-        .route("/:id/comments/:comment_id", delete(handlers::delete_comment))
+        .route(
+            "/:id/comments/:comment_id",
+            delete(handlers::delete_comment),
+        )
 }
