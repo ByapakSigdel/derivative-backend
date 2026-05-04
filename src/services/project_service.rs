@@ -233,19 +233,35 @@ pub async fn update_project(
 ) -> AppResult<UserProject> {
     // Get existing project
     let existing = get_project_by_id(pool, project_id).await?;
-    
-    // Check ownership (admins can update any project)
-    if existing.user_id != user_id && !is_admin {
+
+    // Owner / admin / editor-role collaborator may write. Without the
+    // collaborator branch the joining user's autosave (and any live edits
+    // they make) gets 403 from the backend, so the canvas appears stuck.
+    let is_owner = existing.user_id == user_id;
+    let allowed = is_owner
+        || is_admin
+        || crate::services::collaboration_service::can_user_edit_project(pool, project_id, user_id)
+            .await
+            .unwrap_or(false);
+    if !allowed {
         return Err(AppError::Forbidden);
     }
-    
+
     // Only admins can set featured
     let featured = if is_admin {
         request.featured
     } else {
         None
     };
-    
+
+    // Visibility changes (public / private) are owner-only — a collaborator
+    // shouldn't be able to flip somebody else's project public via PATCH.
+    let is_public_change = if is_owner || is_admin {
+        request.is_public
+    } else {
+        None
+    };
+
     let project: UserProject = sqlx::query_as(
         r#"
         UPDATE user_projects
@@ -276,12 +292,12 @@ pub async fn update_project(
     .bind(request.materials.as_ref())
     .bind(request.learning_goals.as_ref())
     .bind(request.tags.as_ref())
-    .bind(request.is_public)
+    .bind(is_public_change)
     .bind(featured)
     .bind(project_id)
     .fetch_one(pool)
     .await?;
-    
+
     Ok(project)
 }
 

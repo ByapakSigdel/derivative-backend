@@ -14,7 +14,7 @@ use crate::models::{
     CloneProjectRequest, CreateProjectRequest, ListProjectsQuery, ProjectResponse,
     ProjectStats, ProjectWithAuthorResponse, UpdateProjectRequest, UserProject,
 };
-use crate::services::project_service;
+use crate::services::{collaboration_service, project_service};
 use crate::utils::pagination::PaginatedResponse;
 
 /// List user's own projects
@@ -79,15 +79,26 @@ pub async fn get_project(
     Path(id): Path<Uuid>,
 ) -> AppResult<Json<ProjectWithAuthorResponse>> {
     let project = project_service::get_project_with_author(&pool, id).await?;
-    
-    // Check access
+
+    // Access rules for private projects:
+    //   - the owner can always read
+    //   - any user listed in project_collaborators can read
+    // (The WebSocket handler uses can_user_access_project for exactly this
+    // reason; align HTTP GET with that so a collaborator who just accepted an
+    // invite can fetch the project content.)
     if !project.is_public {
-        match user.id() {
-            Some(uid) if uid == project.user_id => {}
-            _ => return Err(AppError::NotFound("Project".to_string())),
+        let allowed = match user.id() {
+            Some(uid) if uid == project.user_id => true,
+            Some(uid) => collaboration_service::can_user_access_project(&pool, id, uid)
+                .await
+                .unwrap_or(false),
+            None => false,
+        };
+        if !allowed {
+            return Err(AppError::NotFound("Project".to_string()));
         }
     }
-    
+
     Ok(Json(ProjectWithAuthorResponse::from(project)))
 }
 
