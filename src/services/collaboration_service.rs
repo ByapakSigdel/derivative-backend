@@ -108,7 +108,11 @@ pub async fn accept_invite_token(
         }
     }
 
-    // Check if user is already a collaborator
+    // If the user has already accepted this project's invite (or any other
+    // invite for the same project), make accept_invite_token idempotent:
+    // return the existing collaborator record so the client lands on the
+    // project just like a first-time join. Erroring here breaks the common
+    // "leave the room and rejoin via the same link" flow.
     let existing = sqlx::query_as::<_, ProjectCollaborator>(
         "SELECT * FROM project_collaborators WHERE project_id = $1 AND user_id = $2",
     )
@@ -117,16 +121,14 @@ pub async fn accept_invite_token(
     .fetch_optional(pool)
     .await?;
 
-    if existing.is_some() {
-        return Err(AppError::BadRequest(
-            "You are already a collaborator on this project".to_string(),
-        ));
+    if let Some(existing) = existing {
+        return Ok(existing);
     }
 
     // Add user as collaborator
     let collaborator = sqlx::query_as::<_, ProjectCollaborator>(
         r#"
-        INSERT INTO project_collaborators 
+        INSERT INTO project_collaborators
         (project_id, user_id, role, invited_by, accepted_at)
         VALUES ($1, $2, $3, $4, NOW())
         RETURNING *
