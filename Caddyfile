@@ -1,3 +1,0 @@
-ws.codeatderivative.com {
-	reverse_proxy backend:8081
-}
