@@ -56,10 +56,29 @@ services:
     depends_on:
       - db
 
+  caddy:
+    image: caddy:2-alpine
+    container_name: derivative-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - derivative-network
+    depends_on:
+      - backend
+
 volumes:
   postgres_data:
   uploads_data:
   pgadmin_data:
+  caddy_data:
+  caddy_config:
 
 networks:
   derivative-network:
