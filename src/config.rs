@@ -82,13 +82,17 @@ impl Config {
 
             jwt_secret: env::var("JWT_SECRET").expect("JWT_SECRET must be set"),
 
+            // 7 days. The frontend doesn't have a refresh-on-401 flow yet,
+            // so a short access token logs users out mid-session. Keep this
+            // long until refresh is wired up.
             jwt_access_expiry: env::var("JWT_ACCESS_EXPIRY")
-                .unwrap_or_else(|_| "900".to_string())
+                .unwrap_or_else(|_| "604800".to_string())
                 .parse()
                 .expect("JWT_ACCESS_EXPIRY must be a number"),
 
+            // 30 days — refresh has to outlive access by a healthy margin.
             jwt_refresh_expiry: env::var("JWT_REFRESH_EXPIRY")
-                .unwrap_or_else(|_| "1296000".to_string())
+                .unwrap_or_else(|_| "2592000".to_string())
                 .parse()
                 .expect("JWT_REFRESH_EXPIRY must be a number"),
 
