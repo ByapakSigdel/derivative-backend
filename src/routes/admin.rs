@@ -7,11 +7,18 @@ use axum::{
 
 use crate::db::DbPool;
 use crate::handlers::admin as admin_handlers;
+use crate::handlers::admin_dashboard as dashboard_handlers;
 use crate::handlers::organizations as org_handlers;
 
 /// Create admin routes
 pub fn admin_routes() -> Router<DbPool> {
     Router::new()
+        // Dashboard / overview — aggregate counts + live presence snapshot
+        .route("/dashboard", get(dashboard_handlers::dashboard_stats))
+        .route("/live", get(dashboard_handlers::live_snapshot))
+        // Cross-account project management
+        .route("/projects", get(dashboard_handlers::list_all_projects))
+        .route("/projects/:id", delete(dashboard_handlers::delete_any_project))
         // User management
         .route("/users", get(admin_handlers::list_users))
         .route("/users", post(admin_handlers::create_user))

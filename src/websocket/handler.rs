@@ -149,6 +149,53 @@ impl RoomManager {
             .map(|entry| (*entry.key(), entry.value().len()))
             .collect()
     }
+
+    /// Read-only snapshot of every room and who's in it. Used by the admin
+    /// /live endpoint. Cheap — just clones identifier fields; doesn't touch
+    /// the WsSender channels.
+    pub fn snapshot(&self) -> RoomSnapshot {
+        let mut rooms: Vec<RoomSnapshotEntry> = Vec::with_capacity(self.rooms.len());
+        let mut total_users = 0usize;
+        for entry in self.rooms.iter() {
+            let project_id = *entry.key();
+            let users: Vec<super::messages::RoomUser> = entry
+                .value()
+                .iter()
+                .map(|(_, u)| super::messages::RoomUser {
+                    user_id: u.user_id,
+                    user_name: u.user_name.clone(),
+                    avatar_url: u.avatar_url.clone(),
+                })
+                .collect();
+            total_users += users.len();
+            rooms.push(RoomSnapshotEntry {
+                project_id,
+                user_count: users.len(),
+                users,
+            });
+        }
+        // Stable-ish ordering (biggest room first) so the admin always sees
+        // the busiest sessions at the top.
+        rooms.sort_by(|a, b| b.user_count.cmp(&a.user_count));
+        RoomSnapshot {
+            total_users,
+            rooms,
+        }
+    }
+}
+
+/// Read-only view of the room manager for admin inspection.
+#[derive(Debug, serde::Serialize)]
+pub struct RoomSnapshot {
+    pub total_users: usize,
+    pub rooms: Vec<RoomSnapshotEntry>,
+}
+
+#[derive(Debug, serde::Serialize)]
+pub struct RoomSnapshotEntry {
+    pub project_id: Uuid,
+    pub user_count: usize,
+    pub users: Vec<super::messages::RoomUser>,
 }
 
 /// Global room manager instance
