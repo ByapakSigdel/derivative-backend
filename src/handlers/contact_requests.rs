@@ -14,37 +14,85 @@ use validator::Validate;
 
 use crate::db::DbPool;
 use crate::errors::{AppError, AppResult};
-use crate::models::{ContactRequest, CreateContactRequest, UpdateContactRequest};
+use crate::models::{
+    ContactRequest, CreateContactRequest, CreateContactResponse, UpdateContactRequest,
+};
 
 /// POST /api/contact-requests — anonymous, no auth.
+///
+/// Dedupe: identical (lower(email), phone, coalesce(message,'')) is
+/// considered the same request thanks to the unique index added in
+/// migration 018. We do a two-step "insert if new, otherwise fetch" so the
+/// response always carries a row + a `created` flag the caller can use to
+/// decide whether to send a confirmation email.
 pub async fn create_contact_request(
     State(pool): State<DbPool>,
     Json(req): Json<CreateContactRequest>,
-) -> AppResult<Json<ContactRequest>> {
+) -> AppResult<Json<CreateContactResponse>> {
     req.validate()
         .map_err(|e| AppError::Validation(e.to_string()))?;
 
-    let trimmed_phone = req
-        .phone
+    let name = req.name.trim().to_string();
+    let email = req.email.trim().to_lowercase();
+    let phone = req.phone.trim().to_string();
+    let user_type = req.user_type.trim().to_lowercase();
+    // Empty/whitespace message → NULL so the dedupe index treats "no
+    // message" consistently regardless of how the client sent it.
+    let message = req
+        .message
         .as_ref()
-        .map(|p| p.trim().to_string())
-        .filter(|p| !p.is_empty());
+        .map(|m| m.trim().to_string())
+        .filter(|m| !m.is_empty());
 
-    let row: ContactRequest = sqlx::query_as(
+    // Try the insert. ON CONFLICT DO NOTHING means a duplicate payload
+    // returns zero rows — we then fetch the existing one separately.
+    let inserted: Option<ContactRequest> = sqlx::query_as(
         r#"
-        INSERT INTO contact_requests (name, email, phone, message)
-        VALUES ($1, $2, $3, $4)
-        RETURNING id, name, email, phone, message, contacted, contacted_at, created_at
+        INSERT INTO contact_requests (name, email, phone, message, user_type)
+        VALUES ($1, $2, $3, $4, $5)
+        ON CONFLICT (lower(email), phone, COALESCE(message, ''))
+        DO NOTHING
+        RETURNING id, name, email, phone, message, user_type,
+                  contacted, contacted_at, created_at
         "#,
     )
-    .bind(req.name.trim())
-    .bind(req.email.trim().to_lowercase())
-    .bind(trimmed_phone)
-    .bind(req.message.trim())
+    .bind(&name)
+    .bind(&email)
+    .bind(&phone)
+    .bind(message.as_deref())
+    .bind(&user_type)
+    .fetch_optional(&pool)
+    .await?;
+
+    if let Some(row) = inserted {
+        return Ok(Json(CreateContactResponse {
+            created: true,
+            request: row,
+        }));
+    }
+
+    // No row inserted ⇒ dupe. Find the existing row so the caller still
+    // gets a useful response (and so the frontend can short-circuit the
+    // "thanks" state instead of erroring).
+    let existing: ContactRequest = sqlx::query_as(
+        r#"
+        SELECT id, name, email, phone, message, user_type,
+               contacted, contacted_at, created_at
+        FROM contact_requests
+        WHERE lower(email) = $1 AND phone = $2 AND COALESCE(message, '') = $3
+        LIMIT 1
+        "#,
+    )
+    .bind(&email)
+    .bind(&phone)
+    .bind(message.as_deref().unwrap_or(""))
     .fetch_one(&pool)
     .await?;
 
-    Ok(Json(row))
+    Ok(Json(CreateContactResponse {
+        created: false,
+        request: existing,
+    }))
 }
 
 /// GET /api/admin/contact-requests — admin only.
@@ -53,7 +101,8 @@ pub async fn list_contact_requests(
 ) -> AppResult<Json<Vec<ContactRequest>>> {
     let rows: Vec<ContactRequest> = sqlx::query_as(
         r#"
-        SELECT id, name, email, phone, message, contacted, contacted_at, created_at
+        SELECT id, name, email, phone, message, user_type,
+               contacted, contacted_at, created_at
         FROM contact_requests
         ORDER BY created_at DESC
         "#,
@@ -78,7 +127,8 @@ pub async fn update_contact_request(
         SET contacted = $2,
             contacted_at = CASE WHEN $2 THEN NOW() ELSE NULL END
         WHERE id = $1
-        RETURNING id, name, email, phone, message, contacted, contacted_at, created_at
+        RETURNING id, name, email, phone, message, user_type,
+                  contacted, contacted_at, created_at
         "#,
     )
     .bind(id)
