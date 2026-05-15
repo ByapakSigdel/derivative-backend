@@ -4,6 +4,7 @@
 
 pub mod collaboration;
 pub mod comment;
+pub mod contact_request;
 pub mod like;
 pub mod metrics;
 pub mod organization;
@@ -13,6 +14,7 @@ pub mod view;
 
 pub use collaboration::*;
 pub use comment::*;
+pub use contact_request::*;
 pub use like::*;
 pub use metrics::*;
 pub use organization::*;

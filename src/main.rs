@@ -38,9 +38,10 @@ use config::CONFIG;
 use db::{check_health, create_pool, get_pool_stats, DbPool};
 use errors::AppResult;
 use routes::{
-    admin_routes, auth_routes, protected_auth_routes, community_routes, 
+    admin_routes, auth_routes, protected_auth_routes, community_routes,
     project_routes, user_routes, ws_routes, collaboration_routes,
-    admin_metrics_routes, metrics_routes
+    admin_metrics_routes, metrics_routes,
+    admin_contact_request_routes, public_contact_request_routes,
 };
 use utils::file_storage::ensure_upload_dirs;
 
@@ -108,6 +109,11 @@ async fn main() -> anyhow::Result<()> {
         
         // Auth routes (no auth required for login/refresh)
         .nest("/api/auth", auth_routes())
+
+        // Contact requests — public POST, no auth (anonymous trial users
+        // submit the "Get access" form here). The admin-only GET/PATCH
+        // pair is nested separately below, under the admin auth chain.
+        .nest("/api/contact-requests", public_contact_request_routes())
         
         // Protected auth routes (auth required for me/logout)
         .nest(
@@ -171,6 +177,19 @@ async fn main() -> anyhow::Result<()> {
         .nest(
             "/api/admin/metrics",
             admin_metrics_routes()
+                .layer(axum_middleware::from_fn(middleware::require_admin))
+                .layer(axum_middleware::from_fn_with_state(
+                    pool.clone(),
+                    middleware::require_auth,
+                )),
+        )
+
+        // Admin contact-request routes (protected + admin only) — list and
+        // mark-contacted endpoints for the leads submitted via the public
+        // POST endpoint above.
+        .nest(
+            "/api/admin/contact-requests",
+            admin_contact_request_routes()
                 .layer(axum_middleware::from_fn(middleware::require_admin))
                 .layer(axum_middleware::from_fn_with_state(
                     pool.clone(),
