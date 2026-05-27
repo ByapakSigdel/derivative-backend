@@ -6,18 +6,50 @@ use sqlx::{FromRow, Type};
 use uuid::Uuid;
 use validator::Validate;
 
-/// User type enum matching PostgreSQL enum
+/// User type enum matching PostgreSQL enum.
+///
+/// Role hierarchy (most → least privileged):
+///   Admin (platform)  → OrgAdmin → Teacher → Student → User
+///
+/// `OrgAdmin`/`Teacher`/`Student` are scoped to the user's `organization_id`.
+/// The lowercase rename matches the existing `user_type` Postgres enum; the
+/// two-word `OrgAdmin` is mapped explicitly to the `org_admin` enum label
+/// (the container's `lowercase` rule would otherwise produce `orgadmin`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[sqlx(type_name = "user_type", rename_all = "lowercase")]
 #[serde(rename_all = "lowercase")]
 pub enum UserType {
     Admin,
+    #[sqlx(rename = "org_admin")]
+    #[serde(rename = "org_admin")]
+    OrgAdmin,
+    Teacher,
+    Student,
     User,
 }
 
 impl Default for UserType {
     fn default() -> Self {
         Self::User
+    }
+}
+
+/// Roles an Org Admin is allowed to assign to members of their own
+/// organization. Deliberately narrower than `UserType` so an org admin can
+/// never mint another admin or org admin via the org-scoped endpoints.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum OrgMemberRole {
+    Teacher,
+    Student,
+}
+
+impl From<OrgMemberRole> for UserType {
+    fn from(role: OrgMemberRole) -> Self {
+        match role {
+            OrgMemberRole::Teacher => UserType::Teacher,
+            OrgMemberRole::Student => UserType::Student,
+        }
     }
 }
 
@@ -206,5 +238,63 @@ pub struct ListUsersQuery {
     pub search: Option<String>,
     pub user_type: Option<UserType>,
     pub organization_id: Option<Uuid>,
+    pub is_active: Option<bool>,
+}
+
+/// Request body for an Org Admin creating a teacher/student in their own org.
+/// The organization is taken from the caller's token, never the body, and the
+/// role is constrained to teacher/student.
+#[derive(Debug, Deserialize, Validate)]
+pub struct CreateOrgMemberRequest {
+    #[validate(email(message = "Invalid email format"))]
+    pub email: String,
+
+    #[validate(length(
+        min = 1,
+        max = 255,
+        message = "Full name must be between 1 and 255 characters"
+    ))]
+    pub full_name: String,
+
+    #[validate(length(
+        min = 8,
+        max = 128,
+        message = "Password must be between 8 and 128 characters"
+    ))]
+    pub password: String,
+
+    pub role: OrgMemberRole,
+}
+
+/// Request body for an Org Admin updating a member of their own org.
+#[derive(Debug, Deserialize, Validate)]
+pub struct UpdateOrgMemberRequest {
+    #[validate(length(
+        min = 1,
+        max = 255,
+        message = "Full name must be between 1 and 255 characters"
+    ))]
+    pub full_name: Option<String>,
+
+    #[validate(length(
+        min = 8,
+        max = 128,
+        message = "Password must be between 8 and 128 characters"
+    ))]
+    pub password: Option<String>,
+
+    pub role: Option<OrgMemberRole>,
+
+    pub is_active: Option<bool>,
+}
+
+/// Query parameters for listing org members.
+#[derive(Debug, Deserialize)]
+pub struct ListOrgMembersQuery {
+    pub page: Option<u32>,
+    pub per_page: Option<u32>,
+    pub search: Option<String>,
+    /// Optional role filter (teacher/student).
+    pub role: Option<OrgMemberRole>,
     pub is_active: Option<bool>,
 }

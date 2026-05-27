@@ -42,6 +42,7 @@ use routes::{
     project_routes, user_routes, ws_routes, collaboration_routes,
     admin_metrics_routes, metrics_routes,
     admin_contact_request_routes, public_contact_request_routes,
+    org_routes, classroom_routes, assignment_routes, submission_routes,
 };
 use utils::file_storage::ensure_upload_dirs;
 
@@ -161,7 +162,40 @@ async fn main() -> anyhow::Result<()> {
                 middleware::require_auth,
             )),
         )
-        
+
+        // Org Admin routes (protected; handler enforces org_admin + org scope)
+        .nest(
+            "/api/org",
+            org_routes().layer(axum_middleware::from_fn_with_state(
+                pool.clone(),
+                middleware::require_auth,
+            )),
+        )
+
+        // Classroom / assignment / submission routes (protected; handlers
+        // enforce per-role admin/org-admin/teacher/student access).
+        .nest(
+            "/api/classrooms",
+            classroom_routes().layer(axum_middleware::from_fn_with_state(
+                pool.clone(),
+                middleware::require_auth,
+            )),
+        )
+        .nest(
+            "/api/assignments",
+            assignment_routes().layer(axum_middleware::from_fn_with_state(
+                pool.clone(),
+                middleware::require_auth,
+            )),
+        )
+        .nest(
+            "/api/submissions",
+            submission_routes().layer(axum_middleware::from_fn_with_state(
+                pool.clone(),
+                middleware::require_auth,
+            )),
+        )
+
         // Admin routes (protected + admin only)
         .nest(
             "/api/admin",

@@ -5,6 +5,7 @@ pub mod user_service;
 pub mod project_service;
 pub mod community_service;
 pub mod organization_service;
+pub mod classroom_service;
 pub mod collaboration_service;
 pub mod metrics_service;
 

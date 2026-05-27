@@ -19,6 +19,10 @@ pub struct AuthUser {
     pub id: Uuid,
     pub email: String,
     pub user_type: UserType,
+    /// Organization the user belongs to. `None` for platform admins and
+    /// unaffiliated users. Carried from the access token so org-scoped
+    /// endpoints don't need an extra DB lookup on every request.
+    pub organization_id: Option<Uuid>,
 }
 
 impl From<AccessTokenClaims> for AuthUser {
@@ -27,14 +31,40 @@ impl From<AccessTokenClaims> for AuthUser {
             id: claims.sub,
             email: claims.email,
             user_type: claims.user_type,
+            organization_id: claims.organization_id,
         }
     }
 }
 
 impl AuthUser {
-    /// Check if the user is an admin
+    /// Platform admin — ultimate power across every organization.
     pub fn is_admin(&self) -> bool {
         self.user_type == UserType::Admin
+    }
+
+    /// Org admin — manages a single organization's members and classrooms.
+    pub fn is_org_admin(&self) -> bool {
+        self.user_type == UserType::OrgAdmin
+    }
+
+    pub fn is_teacher(&self) -> bool {
+        self.user_type == UserType::Teacher
+    }
+
+    pub fn is_student(&self) -> bool {
+        self.user_type == UserType::Student
+    }
+
+    /// True if this user may administer the given organization: a platform
+    /// admin may administer any org; an org admin only their own.
+    pub fn can_administer_org(&self, org: Uuid) -> bool {
+        self.is_admin() || (self.is_org_admin() && self.organization_id == Some(org))
+    }
+
+    /// True if this user belongs to (or, for platform admins, is allowed to
+    /// act within) the given organization.
+    pub fn in_org(&self, org: Uuid) -> bool {
+        self.is_admin() || self.organization_id == Some(org)
     }
 }
 
@@ -104,9 +134,18 @@ impl CurrentUser {
     pub fn user_type(&self) -> UserType {
         self.0.user_type
     }
-    
+
     pub fn is_admin(&self) -> bool {
         self.0.is_admin()
+    }
+
+    pub fn organization_id(&self) -> Option<Uuid> {
+        self.0.organization_id
+    }
+
+    /// Borrow the underlying auth user for the richer role/org helpers.
+    pub fn auth(&self) -> &AuthUser {
+        &self.0
     }
 }
 

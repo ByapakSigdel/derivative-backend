@@ -5,8 +5,8 @@ use uuid::Uuid;
 
 use crate::errors::{AppError, AppResult};
 use crate::models::{
-    CreateUserRequest, ListUsersQuery, UpdateUserRequest, UserProfile, UserType,
-    UserWithOrganization,
+    CreateOrgMemberRequest, CreateUserRequest, ListOrgMembersQuery, ListUsersQuery,
+    UpdateOrgMemberRequest, UpdateUserRequest, UserProfile, UserType, UserWithOrganization,
 };
 use crate::utils::pagination::{PaginatedResponse, PaginationParams, Paginate};
 use crate::utils::password::{hash_password, validate_password_strength};
@@ -298,6 +298,190 @@ pub async fn is_admin(pool: &PgPool, user_id: Uuid) -> AppResult<bool> {
     .bind(user_id)
     .fetch_optional(pool)
     .await?;
-    
+
     Ok(result.map(|(t,)| t == UserType::Admin).unwrap_or(false))
+}
+
+// ---------------------------------------------------------------------------
+// Org-scoped member management (used by Org Admins). Every function here is
+// constrained to teachers/students of one organization, so an org admin can
+// never create or touch an admin/org_admin or a member of another org.
+// ---------------------------------------------------------------------------
+
+/// Guard: the target must be a teacher/student in `organization_id`. Returns
+/// NotFound (not Forbidden) so an org admin can't probe other orgs' members.
+fn ensure_org_member(user: &UserProfile, organization_id: Uuid) -> AppResult<()> {
+    let is_member = user.organization_id == Some(organization_id)
+        && matches!(user.user_type, UserType::Teacher | UserType::Student);
+    if !is_member {
+        return Err(AppError::NotFound("User".to_string()));
+    }
+    Ok(())
+}
+
+/// Create a teacher/student in the given organization.
+pub async fn create_org_member(
+    pool: &PgPool,
+    organization_id: Uuid,
+    request: &CreateOrgMemberRequest,
+) -> AppResult<UserProfile> {
+    validate_password_strength(&request.password)?;
+
+    let exists: Option<(Uuid,)> =
+        sqlx::query_as("SELECT id FROM user_profiles WHERE email = $1")
+            .bind(&request.email)
+            .fetch_optional(pool)
+            .await?;
+    if exists.is_some() {
+        return Err(AppError::Conflict("Email already registered".to_string()));
+    }
+
+    let password_hash = hash_password(&request.password)?;
+    let user_type: UserType = request.role.into();
+
+    let user: UserProfile = sqlx::query_as(
+        r#"
+        INSERT INTO user_profiles (email, full_name, password_hash, user_type, organization_id)
+        VALUES ($1, $2, $3, $4, $5)
+        RETURNING id, email, full_name, password_hash, user_type, organization_id,
+                  avatar_url, is_active, refresh_token, refresh_token_expires_at,
+                  created_at, updated_at
+        "#,
+    )
+    .bind(&request.email)
+    .bind(&request.full_name)
+    .bind(&password_hash)
+    .bind(user_type)
+    .bind(organization_id)
+    .fetch_one(pool)
+    .await?;
+
+    Ok(user)
+}
+
+/// List teachers/students of one organization, with optional search/role/active
+/// filters and pagination.
+pub async fn list_org_members(
+    pool: &PgPool,
+    organization_id: Uuid,
+    query: &ListOrgMembersQuery,
+) -> AppResult<PaginatedResponse<UserWithOrganization>> {
+    let pagination = PaginationParams::new(query.page, query.per_page);
+    let role_filter: Option<UserType> = query.role.map(UserType::from);
+
+    let total: (i64,) = sqlx::query_as(
+        r#"
+        SELECT COUNT(*) FROM user_profiles u
+        WHERE u.organization_id = $1
+          AND u.user_type IN ('teacher', 'student')
+          AND ($2::text IS NULL OR u.email ILIKE '%' || $2 || '%' OR u.full_name ILIKE '%' || $2 || '%')
+          AND ($3::user_type IS NULL OR u.user_type = $3)
+          AND ($4::bool IS NULL OR u.is_active = $4)
+        "#,
+    )
+    .bind(organization_id)
+    .bind(query.search.as_deref())
+    .bind(role_filter)
+    .bind(query.is_active)
+    .fetch_one(pool)
+    .await?;
+
+    let users: Vec<UserWithOrganization> = sqlx::query_as(
+        r#"
+        SELECT u.id, u.email, u.full_name, u.user_type, u.organization_id,
+               o.name as organization_name, u.avatar_url, u.is_active,
+               u.created_at, u.updated_at
+        FROM user_profiles u
+        LEFT JOIN organizations o ON u.organization_id = o.id
+        WHERE u.organization_id = $1
+          AND u.user_type IN ('teacher', 'student')
+          AND ($2::text IS NULL OR u.email ILIKE '%' || $2 || '%' OR u.full_name ILIKE '%' || $2 || '%')
+          AND ($3::user_type IS NULL OR u.user_type = $3)
+          AND ($4::bool IS NULL OR u.is_active = $4)
+        ORDER BY u.created_at DESC
+        LIMIT $5 OFFSET $6
+        "#,
+    )
+    .bind(organization_id)
+    .bind(query.search.as_deref())
+    .bind(role_filter)
+    .bind(query.is_active)
+    .bind(pagination.limit())
+    .bind(pagination.offset())
+    .fetch_all(pool)
+    .await?;
+
+    Ok(users.paginate(&pagination, total.0))
+}
+
+/// Fetch one org member (teacher/student) scoped to the organization.
+pub async fn get_org_member(
+    pool: &PgPool,
+    organization_id: Uuid,
+    user_id: Uuid,
+) -> AppResult<UserProfile> {
+    let user = get_user_by_id(pool, user_id).await?;
+    ensure_org_member(&user, organization_id)?;
+    Ok(user)
+}
+
+/// Update an org member's name/password/role/active flag. Cannot move the user
+/// out of teacher/student, and only affects members of this organization.
+pub async fn update_org_member(
+    pool: &PgPool,
+    organization_id: Uuid,
+    user_id: Uuid,
+    request: &UpdateOrgMemberRequest,
+) -> AppResult<UserProfile> {
+    let existing = get_user_by_id(pool, user_id).await?;
+    ensure_org_member(&existing, organization_id)?;
+
+    let password_hash = if let Some(ref password) = request.password {
+        validate_password_strength(password)?;
+        Some(hash_password(password)?)
+    } else {
+        None
+    };
+    let new_role: Option<UserType> = request.role.map(UserType::from);
+
+    let user: UserProfile = sqlx::query_as(
+        r#"
+        UPDATE user_profiles
+        SET full_name = COALESCE($1, full_name),
+            password_hash = COALESCE($2, password_hash),
+            user_type = COALESCE($3, user_type),
+            is_active = COALESCE($4, is_active),
+            updated_at = NOW()
+        WHERE id = $5
+        RETURNING id, email, full_name, password_hash, user_type, organization_id,
+                  avatar_url, is_active, refresh_token, refresh_token_expires_at,
+                  created_at, updated_at
+        "#,
+    )
+    .bind(request.full_name.as_deref())
+    .bind(password_hash.as_deref())
+    .bind(new_role)
+    .bind(request.is_active)
+    .bind(user_id)
+    .fetch_one(pool)
+    .await?;
+
+    Ok(user)
+}
+
+/// Remove an org member (teacher/student) from this organization.
+pub async fn delete_org_member(
+    pool: &PgPool,
+    organization_id: Uuid,
+    user_id: Uuid,
+) -> AppResult<()> {
+    let existing = get_user_by_id(pool, user_id).await?;
+    ensure_org_member(&existing, organization_id)?;
+
+    sqlx::query("DELETE FROM user_profiles WHERE id = $1")
+        .bind(user_id)
+        .execute(pool)
+        .await?;
+
+    Ok(())
 }

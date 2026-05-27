@@ -16,8 +16,13 @@ pub struct AccessTokenClaims {
     pub sub: Uuid,
     /// User email
     pub email: String,
-    /// User type (admin/user)
+    /// User type (admin/org_admin/teacher/student/user)
     pub user_type: UserType,
+    /// Organization the user belongs to (None for platform admins / unaffiliated
+    /// users). `#[serde(default)]` keeps tokens issued before this field existed
+    /// decodable — they simply resolve to `None` until the user logs in again.
+    #[serde(default)]
+    pub organization_id: Option<Uuid>,
     /// Issued at timestamp
     pub iat: i64,
     /// Expiration timestamp
@@ -51,14 +56,20 @@ pub struct TokenPair {
 }
 
 /// Generate an access token for a user
-pub fn generate_access_token(user_id: Uuid, email: &str, user_type: UserType) -> AppResult<String> {
+pub fn generate_access_token(
+    user_id: Uuid,
+    email: &str,
+    user_type: UserType,
+    organization_id: Option<Uuid>,
+) -> AppResult<String> {
     let now = Utc::now();
     let exp = now + Duration::seconds(CONFIG.jwt_access_expiry);
-    
+
     let claims = AccessTokenClaims {
         sub: user_id,
         email: email.to_string(),
         user_type,
+        organization_id,
         iat: now.timestamp(),
         exp: exp.timestamp(),
         token_type: "access".to_string(),
@@ -97,8 +108,13 @@ pub fn generate_refresh_token(user_id: Uuid) -> AppResult<(String, Uuid)> {
 }
 
 /// Generate both access and refresh tokens
-pub fn generate_token_pair(user_id: Uuid, email: &str, user_type: UserType) -> AppResult<TokenPair> {
-    let access_token = generate_access_token(user_id, email, user_type)?;
+pub fn generate_token_pair(
+    user_id: Uuid,
+    email: &str,
+    user_type: UserType,
+    organization_id: Option<Uuid>,
+) -> AppResult<TokenPair> {
+    let access_token = generate_access_token(user_id, email, user_type, organization_id)?;
     let (refresh_token, _jti) = generate_refresh_token(user_id)?;
     
     Ok(TokenPair {
@@ -166,12 +182,13 @@ mod tests {
         let email = "test@example.com";
         let user_type = UserType::User;
         
-        let token = generate_access_token(user_id, email, user_type).unwrap();
+        let token = generate_access_token(user_id, email, user_type, None).unwrap();
         let claims = verify_access_token(&token).unwrap();
-        
+
         assert_eq!(claims.sub, user_id);
         assert_eq!(claims.email, email);
         assert_eq!(claims.user_type, user_type);
+        assert_eq!(claims.organization_id, None);
     }
     
     #[test]

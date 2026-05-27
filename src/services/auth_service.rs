@@ -57,7 +57,8 @@ pub async fn login(pool: &PgPool, request: &LoginRequest) -> AppResult<AuthRespo
     }
     
     // Generate tokens
-    let access_token = generate_access_token(user.id, &user.email, user.user_type)?;
+    let access_token =
+        generate_access_token(user.id, &user.email, user.user_type, user.organization_id)?;
     let (refresh_token, _jti) = generate_refresh_token(user.id)?;
     
     // Calculate refresh token expiration
@@ -117,7 +118,8 @@ pub async fn refresh_tokens(pool: &PgPool, refresh_token: &str) -> AppResult<Aut
     }
     
     // Generate new tokens (token rotation)
-    let new_access_token = generate_access_token(user.id, &user.email, user.user_type)?;
+    let new_access_token =
+        generate_access_token(user.id, &user.email, user.user_type, user.organization_id)?;
     let (new_refresh_token, _jti) = generate_refresh_token(user.id)?;
     
     // Calculate new refresh token expiration
