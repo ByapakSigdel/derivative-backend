@@ -341,6 +341,48 @@ pub async fn project_belongs_to(
     Ok(row.is_some())
 }
 
+/// True if `reviewer` may read `project_id` because it's attached to a
+/// submission they're allowed to review — i.e. the submission is past
+/// in_progress (the student marked it done) and lives in a classroom the
+/// reviewer manages (owning teacher, org admin of that org, or platform admin).
+///
+/// This is the authorization behind "a teacher can open a student's private
+/// project to grade it" (see handlers::projects::get_project).
+pub async fn project_is_reviewable_by(
+    pool: &PgPool,
+    project_id: Uuid,
+    reviewer_id: Uuid,
+    reviewer_is_admin: bool,
+    reviewer_is_org_admin: bool,
+    reviewer_org: Option<Uuid>,
+) -> AppResult<bool> {
+    let row: (bool,) = sqlx::query_as(
+        r#"
+        SELECT EXISTS (
+            SELECT 1
+            FROM submissions s
+            JOIN assignments a ON a.id = s.assignment_id
+            JOIN classrooms c ON c.id = a.classroom_id
+            WHERE s.project_id = $1
+              AND s.status <> 'in_progress'
+              AND (
+                $2 = TRUE
+                OR c.teacher_id = $3
+                OR ($4 = TRUE AND $5::uuid IS NOT NULL AND c.organization_id = $5)
+              )
+        )
+        "#,
+    )
+    .bind(project_id)
+    .bind(reviewer_is_admin)
+    .bind(reviewer_id)
+    .bind(reviewer_is_org_admin)
+    .bind(reviewer_org)
+    .fetch_one(pool)
+    .await?;
+    Ok(row.0)
+}
+
 /// Fetch the classroom that owns an assignment (for authorization checks).
 pub async fn get_classroom_for_assignment(
     pool: &PgPool,

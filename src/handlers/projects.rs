@@ -14,7 +14,7 @@ use crate::models::{
     CloneProjectRequest, CreateProjectRequest, ListProjectsQuery, ProjectResponse,
     ProjectStats, ProjectWithAuthorResponse, UpdateProjectRequest, UserProject,
 };
-use crate::services::{collaboration_service, project_service};
+use crate::services::{classroom_service, collaboration_service, project_service};
 use crate::utils::pagination::PaginatedResponse;
 
 /// List user's own projects
@@ -89,9 +89,30 @@ pub async fn get_project(
     if !project.is_public {
         let allowed = match user.id() {
             Some(uid) if uid == project.user_id => true,
-            Some(uid) => collaboration_service::can_user_access_project(&pool, id, uid)
-                .await
-                .unwrap_or(false),
+            Some(uid) => {
+                // A collaborator can read it...
+                let collab = collaboration_service::can_user_access_project(&pool, id, uid)
+                    .await
+                    .unwrap_or(false);
+                // ...and so can a teacher/org-admin/admin reviewing it: the
+                // project is attached to a submission (already marked done) in
+                // a classroom they manage. This is what lets a teacher open a
+                // student's otherwise-private project to grade it.
+                let reviewer = match user.0.as_ref() {
+                    Some(au) => classroom_service::project_is_reviewable_by(
+                        &pool,
+                        id,
+                        au.id,
+                        au.is_admin(),
+                        au.is_org_admin(),
+                        au.organization_id,
+                    )
+                    .await
+                    .unwrap_or(false),
+                    None => false,
+                };
+                collab || reviewer
+            }
             None => false,
         };
         if !allowed {
